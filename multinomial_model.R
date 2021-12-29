@@ -1,69 +1,3 @@
-<<<<<<< HEAD
-detection.exp <- "model{
-
-
-###THIS IS THE MIS-ID MODEL 
-#priors and constraints 
-
-#priors on the confusion probabiities - mlogit
-pr.sawJ.givK[1,1] <- 1-pr.sawJ.givK[2,1]-pr.sawJ.givK[3,1]-pr.sawJ.givK[4,1]
-pr.sawJ.givK[2,1] <- exp(m.pr.sawJ.givK[2,1])/(1+exp(m.pr.sawJ.givK[2,1]) + exp(m.pr.sawJ.givK[3,1]) + exp(m.pr.sawJ.givK[4,1]))
-pr.sawJ.givK[3,1] <- exp(m.pr.sawJ.givK[3,1])/(1+exp(m.pr.sawJ.givK[2,1]) + exp(m.pr.sawJ.givK[3,1]) + exp(m.pr.sawJ.givK[4,1]))
-pr.sawJ.givK[4,1] <- exp(m.pr.sawJ.givK[4,1])/(1+exp(m.pr.sawJ.givK[2,1]) + exp(m.pr.sawJ.givK[3,1]) + exp(m.pr.sawJ.givK[4,1]))
-
-pr.sawJ.givK[1,2] <- exp(m.pr.sawJ.givK[1,2])/(1+exp(m.pr.sawJ.givK[1,2]) + exp(m.pr.sawJ.givK[3,2]) + exp(m.pr.sawJ.givK[4,2]))
-pr.sawJ.givK[2,2] <- 1-pr.sawJ.givK[1,2]-pr.sawJ.givK[3,2]-pr.sawJ.givK[4,2]
-pr.sawJ.givK[3,2] <- exp(m.pr.sawJ.givK[3,2])/(1+exp(m.pr.sawJ.givK[1,2]) + exp(m.pr.sawJ.givK[3,2]) + exp(m.pr.sawJ.givK[4,2]))
-pr.sawJ.givK[4,2] <- exp(m.pr.sawJ.givK[4,2])/(1+exp(m.pr.sawJ.givK[1,2]) + exp(m.pr.sawJ.givK[3,2]) + exp(m.pr.sawJ.givK[4,2]))
-
-pr.sawJ.givK[1,3] <- exp(m.pr.sawJ.givK[1,3])/(1+exp(m.pr.sawJ.givK[1,3]) + exp(m.pr.sawJ.givK[2,3]) + exp(m.pr.sawJ.givK[4,3]))
-pr.sawJ.givK[2,3] <- exp(m.pr.sawJ.givK[2,3])/(1+exp(m.pr.sawJ.givK[1,3]) + exp(m.pr.sawJ.givK[2,3]) + exp(m.pr.sawJ.givK[4,3]))
-pr.sawJ.givK[3,3] <- 1-pr.sawJ.givK[1,3]-pr.sawJ.givK[2,3]-pr.sawJ.givK[4,3]
-pr.sawJ.givK[4,3] <- exp(m.pr.sawJ.givK[4,3])/(1+exp(m.pr.sawJ.givK[1,3]) + exp(m.pr.sawJ.givK[2,3]) + exp(m.pr.sawJ.givK[4,3]))
-
-pr.sawJ.givK[1,4] <- exp(m.pr.sawJ.givK[1,4])/(1+exp(m.pr.sawJ.givK[1,4]) + exp(m.pr.sawJ.givK[2,4]) + exp(m.pr.sawJ.givK[3,4]))
-pr.sawJ.givK[2,4] <- exp(m.pr.sawJ.givK[2,4])/(1+exp(m.pr.sawJ.givK[1,4]) + exp(m.pr.sawJ.givK[2,4]) + exp(m.pr.sawJ.givK[3,4]))
-pr.sawJ.givK[3,4] <- exp(m.pr.sawJ.givK[3,4])/(1+exp(m.pr.sawJ.givK[1,4]) + exp(m.pr.sawJ.givK[2,4]) + exp(m.pr.sawJ.givK[3,4]))
-pr.sawJ.givK[4,4] <- 1-pr.sawJ.givK[1,4]-pr.sawJ.givK[2,4]-pr.sawJ.givK[3,4]
-
-log(m.pr.sawJ.givK[2,1]) ~ dnorm(0,0.01)      
-log(m.pr.sawJ.givK[3,1]) ~ dnorm(0,0.01)      
-log(m.pr.sawJ.givK[4,1]) ~ dnorm(0,0.01) 
-log(m.pr.sawJ.givK[1,2]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[3,2]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[4,2]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[1,3]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[2,3]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[4,3]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[1,4]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[2,4]) ~ dnorm(0,0.01)
-log(m.pr.sawJ.givK[3,4]) ~ dnorm(0,0.01)
-
-
-#this is using Bayes theorem to get what you need: the probability the species was K given you saw J  
-#you can map transect to group so we model misID at the transect scale and detection at the group scale 
-
-#j is the putative species
-for(j in 1:n.species){  
-  #first calculate the denominator for each species - Pr(saw J)
-  pr.sawJ[j] <- pr.sawJ.givK[j,1]*pr.s[tr[i],1] + pr.sawJ.givK[j,2]*pr.s[tr[i],2] + pr.sawJ.givK[j,3]*pr.s[tr[i],3] + pr.sawJ.givK[j,4]*pr.s[tr[i],4] 
-
-  #then get the probability of the true species given what you saw 
-  #k is the true species
-  for(k in 1:n.species){  
-    pr.K.givsawJ[k,j] <- pr.sawJ.givK[j,k]*pr.s[tr[i],k] / pr.sawJ[j]
-  }
-}
-
-#prior on species composition in group i 
-for(i in 1:n.groups){
-  pr.s[i,] ~ ddirch(alpha[])
-}
-alpha <- c(1,1,1,1)
-
-
-#this is modeled at the transect level 
-=======
 library(tidyverse)
 library(runjags)
 library(ggmcmc)
@@ -301,7 +235,6 @@ for(i in 1:n.groups){
 alpha <- rep(1, 4)
 
 #this is modeled at the transect level, changed from n.groups to n.transects
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
 for (tr in 1:n.transects){
   for(j in 1:n.species){
     for(o in 1:n.observers){
@@ -326,16 +259,6 @@ for (tr in 1:n.transects){
       psi[tr,4,3,o] <- pr.s[tr,4]*pr.sawJ.givK[3,4]  #Pr(saw 4|3)
       psi[tr,4,4,o] <- pr.s[tr,4]*pr.sawJ.givK[4,4]  #Pr(saw 4|4)
 
-<<<<<<< HEAD
-      #observer data - multinomial sample from total number of birds in the group and the confusion probabilities 
-      ID[t,j,o] ~ dmultinom(psi[i,j,,o], M.obs[i,o])
-    }
-  }
-}
-    
-
-###THESE ARE THE DETECTION AND AVAILABILITY MODELS  
-=======
 
 #observer data - multinomial sample from total number of birds in the group and the confusion probabilities 
       ID[tr,j,o] ~ dmultinom(psi[tr,j,,o], M.obs[tr,o])
@@ -346,7 +269,6 @@ for (tr in 1:n.transects){
 
 ###DETECTION AND AVAILABILITY MODELS  
 #Need to finalize data input to be the same for each section of the model (detection/availability and ID)
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
 for(i in 1:n.groups){
   for(j in 1:n.species){
 
@@ -354,11 +276,7 @@ for(i in 1:n.groups){
     lambda[i,j] ~ dgamma(0.1,0.1) 
 
     ## Process model
-<<<<<<< HEAD
-    #POV camera data - multinomial sample from the total number of birds in the group, with pr.s probabilities
-=======
     #POV camera data - multinomial sample from the total number of birds in the group, with pr.s probabilities   
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
     
     #I am not totally sure if it is going to work to model pr.s like this here
     #if not, we can just take the mean over transects elsewhere
@@ -366,20 +284,6 @@ for(i in 1:n.groups){
     POV[i,j] ~ dmultinom(pr.s[tr[i],j], M[i])
 
     #FF camera data - abundance of species j in group i prior to plane passing (data), modeled with a mean mu
-<<<<<<< HEAD
-    FF[i,j] ~ dpois(mu[i,j]) 
-
-    #abundance of species j in group i after plane passing (predicted from N-mix), modeled with a mean lambda
-    #this is where we might need the negbin with overdispersion parameter for species(group) size distribution
-    N[i,j] ~ dpois(lambda[i,j]) 
-
-    #the relationship between abundance before and after plane, by species
-    mu[i,j] <- beta[j] * lambda[i,j]
-  
-
-    #use dsum to sum Ntrue.givenseen over true individuals  
-    for(o in 1:n.observer){
-=======
     FF[i,j] ~ dpois(mu[i,j])
     
     # abundance of species j in group i after plane passing (predicted from N-mix), modeled with a mean lambda
@@ -392,7 +296,6 @@ for(i in 1:n.groups){
 
  #use dsum to sum Ntrue.givenseen over true individuals  
     for(o in 1:n.observers){
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
       obs[i,j,o] ~ dsum(Nseen.true[i,j,,o]) 
       
       #Ntrue.givenseen is a multinomial outcome from the true abundance and the pr that you saw J given K
@@ -400,20 +303,12 @@ for(i in 1:n.groups){
       #weird that we aren't using the outcome of Bayes calculation 
       Nseen.true[i,j,,o] ~ dmultinom(pr.sawJ.givK[,j],true[i,j,o]) 
 
-<<<<<<< HEAD
-      #
-=======
       
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
       true[i,j,o] ~ dbin(p[j,o],N[i,j])
     }  
   }     
 }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
 for(j in 1:n.species){
   #prior on relationship between abundance before/after - allows movement in both directions, but we expect beta > 1
   beta[j] ~ dgamma(0.1,0.1)
@@ -423,21 +318,6 @@ for(j in 1:n.species){
     p[j,o] ~ dbeta(1, 1)
   }
 }  
-<<<<<<< HEAD
-
-
-}"
-
-#FF is a matrix of dimension groups, species - this is the count of species j in group i by the FF camera 
-#obs is an array of dimension groups, species, observers - this is the count of species j in group i by observer o
-#ID is an array of dimension transects, species, observers - this is the sum of obs over groups to the transect level 
-#POV is a matrix of dimension groups, species - this is the count of species j in group i by the POV camera
-#M is a vector of dimension groups - this is the total count across species in group i by the POV camera
-#tr is a vector of dimension groups that maps group to transect number (for group i, what is the transect number t)
-#scalars: n.observers, n.species, n.transects, n.groups
-data <- list(FF = FF, obs = obs, ID = ID, POV = POV, M = M, tr = tr, n.transects = n.transects, n.groups = n.groups, n.species = n.species, n.observers = n.observers)
-  
-=======
   
 }"
 
@@ -474,4 +354,3 @@ mult.mod<-run.jags(model = ducks.mult,
 
 
 
->>>>>>> bcc8fd662a53e41e14843a1df8efc1fd22f410b6
