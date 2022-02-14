@@ -22,7 +22,10 @@ sb_df <- sb_df %>% filter(platform == 1)
 
 #Set up array for observer records
 sb_df$Transect <- str_trunc(sb_df$TransectGroup, 12, "right", ellipsis = "")
-ID.obs <- sb_df
+ID.obs <- sb_df[seq(1, nrow(sb_df), 2), ]
+#Pull out a few unique transects/groups to make group1 and group2 have the same no. of transects and groups
+ID.obs <- ID.obs[-c(1, 3, 7, 10, 11, 14),]
+group1 <- ID.obs
 tran <- unique(ID.obs$Transect)
 dumb <- data.frame(tran = tran, 
                    numbers = 1:length(tran))
@@ -43,7 +46,7 @@ for(i in dumb1$tran.grp){
 
 
 ID.obs$SPECIES <- ifelse(ID.obs$SPECIES == "SUSC", "SUSC", ifelse(ID.obs$SPECIES == "BUFF", "BUFF", 
-                ifelse(ID.obs$SPECIES == "WEGR", "WEGR", "other")))
+                                                                  ifelse(ID.obs$SPECIES == "WEGR", "WEGR", "other")))
 ID.BM <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
               values_fn = sum, values_fill = 0)
@@ -56,13 +59,75 @@ ID.TC <- ID.obs %>%
 
 ID.TC <- as.matrix(ID.TC[,c(4, 5, 6, 3)])
 
-ID <- array(c(ID.BM, ID.TC), dim = c(1758, 4, 2))
+ID <- array(c(ID.BM, ID.TC), dim = c(nrow(ID.BM), 4, 2))
 
-M.ID <- apply(ID,c(1,3),sum)
+M.BM <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
+              values_fn = sum, values_fill = 0)
 
-Counts <- sb_df
+M.BM <- M.BM[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.BM)){
+  total.species[i] <- sum(M.BM[i,])
+  M.BM$total.species[i] <- total.species[i]
+}
+
+M.BM <- M.BM$total.species
+
+
+M.TC <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.TC,
+              values_fn = sum, values_fill = 0)
+
+M.TC <- M.TC[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.TC)){
+  total.species[i] <- sum(M.TC[i,])
+  M.TC$total.species[i] <- total.species[i]
+}
+
+M.TC <- M.TC$total.species
+
+M.obs <- cbind(M.BM, M.TC)
+
+
+ID.POV <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
+              values_fn = sum, values_fill = 0)
+
+ID.POV <- as.matrix(ID.POV[,c(4, 5, 6, 3)])
+
+POV <- as.matrix(ID.POV)
+
+M.POV <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
+              values_fn = sum, values_fill = 0)
+
+M.POV <- M.POV[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.POV)){
+  total.species[i] <- sum(M.POV[i,])
+  M.POV$total.species[i] <- total.species[i]
+}
+
+M <- M.POV$total.species
+
+
+group1$all <- paste(group1$TransectGroup, group1$SPECIES, group1$Count.FF, group1$Count.BM, group1$Count.POV,
+                    group1$Count.TC)
+sb_df$all <- paste(sb_df$TransectGroup, sb_df$SPECIES, sb_df$Count.FF, sb_df$Count.BM, sb_df$Count.POV,
+                   sb_df$Count.TC)
+
+group2 <- subset(sb_df, !(all %in% group1$all))
+Counts <- group2
 
 #Convert groups and transects to numbers
+tran <- unique(Counts$Transect)
+dumb <- data.frame(tran = tran, 
+                   numbers = 1:length(tran))
 Counts$numeric_tran <- 0
 for(i in dumb$tran){
   Counts$numeric_tran[Counts$Transect == i] <- match(i, dumb$tran)
@@ -78,7 +143,7 @@ for(i in dumb1$tran.grp){
 }
 
 Counts$SPECIES <- ifelse(Counts$SPECIES == "SUSC", "SUSC", ifelse(Counts$SPECIES == "BUFF", "BUFF", 
-                  ifelse(Counts$SPECIES == "WEGR", "WEGR", "other")))
+                                                                  ifelse(Counts$SPECIES == "WEGR", "WEGR", "other")))
 
 Counts = Counts %>% group_by(numeric_tran, numeric_tran.grp, SPECIES) %>% 
   summarise(Count.FF = sum(Count.FF), Count.BM = sum(Count.BM), Count.TC = sum(Count.TC),
@@ -91,59 +156,22 @@ Counts.FF <- Counts %>%
 Counts.FF <- Counts.FF[,c(3, 4, 5, 2)]
 FF <- as.matrix(Counts.FF)
 
-#Counts.BM <- Counts %>%
-#  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
-#              values_fn = sum, values_fill = 0)
-
-#Counts.BM <- Counts.BM[,c(3, 4, 5, 2)]
-#BM <- as.matrix(Counts.BM)
-
-#Counts.TC <- Counts %>%
-#  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.TC,
-#              values_fn = sum, values_fill = 0)
-
-#Counts.TC <- Counts.TC[,c(3, 4, 5, 2)]
-#TC <- as.matrix(Counts.TC)
-
-#obs <- array(c(BM, TC), dim = c(1758, 4, 2))
-
-#M.BM <- Counts.BM
-
-#total.species <- vector()
-#for(i in 1:nrow(M.BM)){
-#  total.species[i] <- sum(M.BM[i,])
-#  M.BM$total.species[i] <- total.species[i]
-#}
-
-#M.BM <- M.BM$total.species
-
-#M.TC <- Counts.TC
-
-#total.species <- vector()
-#for(i in 1:nrow(M.TC)){
-#  total.species[i] <- sum(M.TC[i,])
-#  M.TC$total.species[i] <- total.species[i]
-#}
-
-#M.TC <- M.TC$total.species
-
-#M.obs <- cbind(M.BM, M.TC)
-
-Counts.POV <- Counts %>%
-  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
+Counts.BM <- Counts %>%
+  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
               values_fn = sum, values_fill = 0)
 
-Counts.POV <- Counts.POV[,c(3, 4, 5, 2)]
-POV <- as.matrix(Counts.POV)
+Counts.BM <- Counts.BM[,c(3, 4, 5, 2)]
+BM <- as.matrix(Counts.BM)
 
-M.POV <- Counts.POV
-total.species <- vector()
-for(i in 1:nrow(M.POV)){
-  total.species[i] <- sum(M.POV[i,])
-  M.POV$total.species[i] <- total.species[i]
-}
+Counts.TC <- Counts %>%
+  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.TC,
+              values_fn = sum, values_fill = 0)
 
-M <- M.POV$total.species
+Counts.TC <- Counts.TC[,c(3, 4, 5, 2)]
+TC <- as.matrix(Counts.TC)
+
+obs <- array(c(BM, TC), dim = c(nrow(BM), 4, 2))
+
 
 Counts.tr <- Counts %>% group_by(numeric_tran.grp) %>% slice(1L)
 tr <- Counts.tr$numeric_tran
@@ -154,29 +182,20 @@ n.transects <- length(unique(Counts$numeric_tran))
 n.species <- length(unique(Counts$SPECIES))
 n.observers <- 2
 
-#choose samples to break up data.set 
-mis.nos <- sample(c(1:n.groups),round(n.groups/2,dig=0))
-mis.nos <- sort(mis.nos)
-det.nos <- setdiff(c(1:n.groups),mis.nos)
 
-#Clean up the data processing script
-#Want to make sure we're getting the right stuff 
 
-#We need obs, POV, and FF data, plus tr object - seems like there is more than that above? 
-#what is obs vs ID calculated above - they seem to be the same 
-
-ID.mis <- ID[mis.nos,,]
-ID.det <- ID[det.nos,,]
-M.obs.mis <- M.ID[mis.nos,] #only need this for misID 
-POV.mis <- POV[mis.nos,] #only need this for misID
-M.mis <- M[mis.nos] #only need this for misID 
-FF.det <- FF[det.nos,] #only need this for detection
-tr.mis <- as.numeric(as.factor(tr[mis.nos])) #only need this for misID 
-n.transects.mis <- length(unique(tr.mis)) #only need this for misID
-n.groups.mis <- dim(ID.mis)[1]
-n.groups.det <- dim(ID.det)[1]
-n.species <- dim(ID.mis)[2]
-n.observers <- dim(ID.mis)[3]
+ID.mis <- ID
+ID.det <- obs
+M.obs.mis <- M.obs #only need this for misID 
+POV.mis <- POV #only need this for misID
+M.mis <- M #only need this for misID 
+FF.det <- FF #only need this for detection
+tr.mis <- tr #only need this for misID 
+n.transects.mis <- n.transects #only need this for misID
+n.groups.mis <- n.groups
+n.groups.det <- n.groups
+n.species <- n.species
+n.observers <- n.observers
 
 cat("
 model {
@@ -320,9 +339,12 @@ for(k in 1:n.species){
 }",file = "ducks.txt")
 
 #DATA
-data.duck <- list(ID.mis=ID.mis,M.obs.mis=M.obs.mis,ID.det=ID.det,POV.mis=POV.mis,M.mis=M.mis,FF.det=FF.det,tr.mis=tr.mis,n.transects.mis=n.transects.mis,n.groups.mis=n.groups.mis,n.groups.det=n.groups.det,n.observers=n.observers,n.species=n.species)
+data.duck <- list(ID.mis=ID.mis,M.obs.mis=M.obs.mis,ID.det=ID.det,POV.mis=POV.mis,M.mis=M.mis,FF.det=FF.det,
+                  tr.mis=tr.mis,n.transects.mis=n.transects.mis,n.groups.mis=n.groups.mis,n.groups.det=n.groups.det,
+                  n.observers=n.observers,n.species=n.species)
 
-inits.duck<-function(){list(N.obsJ=(apply(ID.det,c(1,2),sum)+matrix(rep(1,879*4),nrow=879,ncol=4)))}
+inits.duck<-function(){list(N.obsJ=(apply(ID.det,c(1,2),sum)+matrix(rep(1,n.groups*n.species),
+                                                                    nrow=n.groups,ncol=n.species)))}
 
 #PARAMETERS
 params.duck <- c("pr.ID.pred","pr.sp.pred","mis.ID")
