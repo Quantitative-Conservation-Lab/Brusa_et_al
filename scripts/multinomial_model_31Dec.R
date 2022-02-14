@@ -4,6 +4,7 @@ library(runjags)
 library(ggmcmc)
 library(ggplot2)
 library(here)
+library(rsample)
 
 
 sb_df <- read.csv(here('Data', 'seaducks.csv'))
@@ -23,7 +24,10 @@ sb_df <- sb_df %>% filter(platform == 1)
 
 #Set up array for observer records
 sb_df$Transect <- str_trunc(sb_df$TransectGroup, 12, "right", ellipsis = "")
-ID.obs <- sb_df
+ID.obs <- sb_df[seq(1, nrow(sb_df), 2), ]
+#Pull out a few unique transects/groups to make group1 and group2 have the same no. of transects and groups
+ID.obs <- ID.obs[-c(1, 3, 7, 10, 11, 14),]
+group1 <- ID.obs
 tran <- unique(ID.obs$Transect)
 dumb <- data.frame(tran = tran, 
                    numbers = 1:length(tran))
@@ -44,7 +48,7 @@ for(i in dumb1$tran.grp){
 
 
 ID.obs$SPECIES <- ifelse(ID.obs$SPECIES == "SUSC", "SUSC", ifelse(ID.obs$SPECIES == "BUFF", "BUFF", 
-                ifelse(ID.obs$SPECIES == "WEGR", "WEGR", "other")))
+                                                                  ifelse(ID.obs$SPECIES == "WEGR", "WEGR", "other")))
 ID.BM <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
               values_fn = sum, values_fill = 0)
@@ -57,11 +61,75 @@ ID.TC <- ID.obs %>%
 
 ID.TC <- as.matrix(ID.TC[,c(4, 5, 6, 3)])
 
-ID <- array(c(ID.BM, ID.TC), dim = c(1758, 4, 2))
+ID <- array(c(ID.BM, ID.TC), dim = c(nrow(ID.BM), 4, 2))
 
-Counts <- sb_df
+M.BM <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.BM,
+              values_fn = sum, values_fill = 0)
+
+M.BM <- M.BM[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.BM)){
+  total.species[i] <- sum(M.BM[i,])
+  M.BM$total.species[i] <- total.species[i]
+}
+
+M.BM <- M.BM$total.species
+
+
+M.TC <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.TC,
+              values_fn = sum, values_fill = 0)
+
+M.TC <- M.TC[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.TC)){
+  total.species[i] <- sum(M.TC[i,])
+  M.TC$total.species[i] <- total.species[i]
+}
+
+M.TC <- M.TC$total.species
+
+M.obs <- cbind(M.BM, M.TC)
+
+
+ID.POV <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
+              values_fn = sum, values_fill = 0)
+
+ID.POV <- as.matrix(ID.POV[,c(4, 5, 6, 3)])
+
+POV <- as.matrix(ID.POV)
+
+M.POV <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran, numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
+              values_fn = sum, values_fill = 0)
+
+M.POV <- M.POV[,3:6]
+
+total.species <- vector()
+for(i in 1:nrow(M.POV)){
+  total.species[i] <- sum(M.POV[i,])
+  M.POV$total.species[i] <- total.species[i]
+}
+
+M <- M.POV$total.species
+
+
+group1$all <- paste(group1$TransectGroup, group1$SPECIES, group1$Count.FF, group1$Count.BM, group1$Count.POV,
+                    group1$Count.TC)
+sb_df$all <- paste(sb_df$TransectGroup, sb_df$SPECIES, sb_df$Count.FF, sb_df$Count.BM, sb_df$Count.POV,
+                   sb_df$Count.TC)
+
+group2 <- subset(sb_df, !(all %in% group1$all))
+Counts <- group2
 
 #Convert groups and transects to numbers
+tran <- unique(Counts$Transect)
+dumb <- data.frame(tran = tran, 
+                   numbers = 1:length(tran))
 Counts$numeric_tran <- 0
 for(i in dumb$tran){
   Counts$numeric_tran[Counts$Transect == i] <- match(i, dumb$tran)
@@ -77,7 +145,7 @@ for(i in dumb1$tran.grp){
 }
 
 Counts$SPECIES <- ifelse(Counts$SPECIES == "SUSC", "SUSC", ifelse(Counts$SPECIES == "BUFF", "BUFF", 
-                  ifelse(Counts$SPECIES == "WEGR", "WEGR", "other")))
+                                                                  ifelse(Counts$SPECIES == "WEGR", "WEGR", "other")))
 
 Counts = Counts %>% group_by(numeric_tran, numeric_tran.grp, SPECIES) %>% 
   summarise(Count.FF = sum(Count.FF), Count.BM = sum(Count.BM), Count.TC = sum(Count.TC),
@@ -104,45 +172,8 @@ Counts.TC <- Counts %>%
 Counts.TC <- Counts.TC[,c(3, 4, 5, 2)]
 TC <- as.matrix(Counts.TC)
 
-obs <- array(c(BM, TC), dim = c(1758, 4, 2))
+obs <- array(c(BM, TC), dim = c(nrow(BM), 4, 2))
 
-M.BM <- Counts.BM
-
-total.species <- vector()
-for(i in 1:nrow(M.BM)){
-  total.species[i] <- sum(M.BM[i,])
-  M.BM$total.species[i] <- total.species[i]
-}
-
-M.BM <- M.BM$total.species
-
-M.TC <- Counts.TC
-
-total.species <- vector()
-for(i in 1:nrow(M.TC)){
-  total.species[i] <- sum(M.TC[i,])
-  M.TC$total.species[i] <- total.species[i]
-}
-
-M.TC <- M.TC$total.species
-
-M.obs <- cbind(M.BM, M.TC)
-
-Counts.POV <- Counts %>%
-  pivot_wider(id_cols = c(numeric_tran.grp), names_from = SPECIES, values_from = Count.POV,
-              values_fn = sum, values_fill = 0)
-
-Counts.POV <- Counts.POV[,c(3, 4, 5, 2)]
-POV <- as.matrix(Counts.POV)
-
-M.POV <- Counts.POV
-total.species <- vector()
-for(i in 1:nrow(M.POV)){
-  total.species[i] <- sum(M.POV[i,])
-  M.POV$total.species[i] <- total.species[i]
-}
-
-M <- M.POV$total.species
 
 Counts.tr <- Counts %>% group_by(numeric_tran.grp) %>% slice(1L)
 tr <- Counts.tr$numeric_tran
@@ -157,26 +188,38 @@ cat("model {
 
 #########################SPECIES MIS-ID COMPONENT#########################
 
-#priors on the confusion probabiities - mlogit link
+#priors on the confusion probabilities - mlogit link
 for(o in 1:n.observers){
   pr.obsJ.spK[1,1,o] <- 1-pr.obsJ.spK[2,1,o]-pr.obsJ.spK[3,1,o]-pr.obsJ.spK[4,1,o]
-  pr.obsJ.spK[2,1,o] <- exp(m.pr.obsJ.spK[2,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + exp(m.pr.obsJ.spK[4,1,o]))
-  pr.obsJ.spK[3,1,o] <- exp(m.pr.obsJ.spK[3,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + exp(m.pr.obsJ.spK[4,1,o]))
-  pr.obsJ.spK[4,1,o] <- exp(m.pr.obsJ.spK[4,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + exp(m.pr.obsJ.spK[4,1,o]))
+  pr.obsJ.spK[2,1,o] <- exp(m.pr.obsJ.spK[2,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + 
+  exp(m.pr.obsJ.spK[4,1,o]))
+  pr.obsJ.spK[3,1,o] <- exp(m.pr.obsJ.spK[3,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + 
+  exp(m.pr.obsJ.spK[4,1,o]))
+  pr.obsJ.spK[4,1,o] <- exp(m.pr.obsJ.spK[4,1,o])/(1+exp(m.pr.obsJ.spK[2,1,o]) + exp(m.pr.obsJ.spK[3,1,o]) + 
+  exp(m.pr.obsJ.spK[4,1,o]))
 
-  pr.obsJ.spK[1,2,o] <- exp(m.pr.obsJ.spK[1,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + exp(m.pr.obsJ.spK[4,2,o]))
+  pr.obsJ.spK[1,2,o] <- exp(m.pr.obsJ.spK[1,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + 
+  exp(m.pr.obsJ.spK[4,2,o]))
   pr.obsJ.spK[2,2,o] <- 1-pr.obsJ.spK[1,2,o]-pr.obsJ.spK[3,2,o]-pr.obsJ.spK[4,2,o]
-  pr.obsJ.spK[3,2,o] <- exp(m.pr.obsJ.spK[3,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + exp(m.pr.obsJ.spK[4,2,o]))
-  pr.obsJ.spK[4,2,o] <- exp(m.pr.obsJ.spK[4,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + exp(m.pr.obsJ.spK[4,2,o]))
+  pr.obsJ.spK[3,2,o] <- exp(m.pr.obsJ.spK[3,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + 
+  exp(m.pr.obsJ.spK[4,2,o]))
+  pr.obsJ.spK[4,2,o] <- exp(m.pr.obsJ.spK[4,2,o])/(1+exp(m.pr.obsJ.spK[1,2,o]) + exp(m.pr.obsJ.spK[3,2,o]) + 
+  exp(m.pr.obsJ.spK[4,2,o]))
 
-  pr.obsJ.spK[1,3,o] <- exp(m.pr.obsJ.spK[1,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + exp(m.pr.obsJ.spK[4,3,o]))
-  pr.obsJ.spK[2,3,o] <- exp(m.pr.obsJ.spK[2,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + exp(m.pr.obsJ.spK[4,3,o]))
+  pr.obsJ.spK[1,3,o] <- exp(m.pr.obsJ.spK[1,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + 
+  exp(m.pr.obsJ.spK[4,3,o]))
+  pr.obsJ.spK[2,3,o] <- exp(m.pr.obsJ.spK[2,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + 
+  exp(m.pr.obsJ.spK[4,3,o]))
   pr.obsJ.spK[3,3,o] <- 1-pr.obsJ.spK[1,3,o]-pr.obsJ.spK[2,3,o]-pr.obsJ.spK[4,3,o]
-  pr.obsJ.spK[4,3,o] <- exp(m.pr.obsJ.spK[4,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + exp(m.pr.obsJ.spK[4,3,o]))
+  pr.obsJ.spK[4,3,o] <- exp(m.pr.obsJ.spK[4,3,o])/(1+exp(m.pr.obsJ.spK[1,3,o]) + exp(m.pr.obsJ.spK[2,3,o]) + 
+  exp(m.pr.obsJ.spK[4,3,o]))
 
-  pr.obsJ.spK[1,4,o] <- exp(m.pr.obsJ.spK[1,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + exp(m.pr.obsJ.spK[3,4,o]))
-  pr.obsJ.spK[2,4,o] <- exp(m.pr.obsJ.spK[2,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + exp(m.pr.obsJ.spK[3,4,o]))
-  pr.obsJ.spK[3,4,o] <- exp(m.pr.obsJ.spK[3,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + exp(m.pr.obsJ.spK[3,4,o]))
+  pr.obsJ.spK[1,4,o] <- exp(m.pr.obsJ.spK[1,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + 
+  exp(m.pr.obsJ.spK[3,4,o]))
+  pr.obsJ.spK[2,4,o] <- exp(m.pr.obsJ.spK[2,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + 
+  exp(m.pr.obsJ.spK[3,4,o]))
+  pr.obsJ.spK[3,4,o] <- exp(m.pr.obsJ.spK[3,4,o])/(1+exp(m.pr.obsJ.spK[1,4,o]) + exp(m.pr.obsJ.spK[2,4,o]) + 
+  exp(m.pr.obsJ.spK[3,4,o]))
   pr.obsJ.spK[4,4,o] <- 1-pr.obsJ.spK[1,4,o]-pr.obsJ.spK[2,4,o]-pr.obsJ.spK[3,4,o]
 
   m.pr.obsJ.spK[2,1,o] ~ dnorm(0,0.01)      
@@ -193,7 +236,8 @@ for(o in 1:n.observers){
   m.pr.obsJ.spK[3,4,o] ~ dnorm(0,0.01)
 }
 
-#probability of observing species j on transect t for observer o is a function of how common species k is there and the probability of observing j given true species k
+#probability of observing species j on transect t for observer o is a function of how common species k is there and the 
+#probability of observing j given true species k
 #pr.spK is estimated from the POV camera, so we are just modeling pr.obsJ.spK in this part of the code  
 for(t in 1:n.transects){
   for(o in 1:n.observers){
@@ -220,7 +264,7 @@ for(t in 1:n.transects){
       for(o in 1:n.observers){
         pr.spK.obsJ[t,k,j,o] <- (pr.obsJ.spK[j,k,o]*pr.spK[t,1])/(pr.obsJ[t,j,o])
       }
-      pr.spK.obsJ.mean[t,k,j] <- (pr.spK.obsJ[t,k,j,1] + pr.spK.obsJ[t,k,j,2])/2 
+      pr.spK.obsJ.mean[t,k,j] <- (pr.spK.obsJ[t,k,j,1] + pr.spK.obsJ[t,k,j,2])/2 #mean per spp pair per transect
     }
   }
 }
@@ -253,13 +297,13 @@ for(i in 1:n.groups){
     FF[i,k] ~ dpois(mu[i,k])
     
     #the relationship between abundance from observers and abundance before the plane passed, by species
-    mu[i,k] <- beta[k] * lambda[i,k]
+    mu[i,k] <- beta[k] * lambda[i,k] #N.spK instead of lambda
   }
 }
 
 #prior on beta 
 for(k in 1:n.species){
-  beta[k] ~ dunif(0,5)
+  beta[k] ~ dunif(0,5) #each species gets is own beta
 }  
 
 #########################DETECTION COMPONENT#########################
@@ -268,7 +312,7 @@ for(k in 1:n.species){
 #might need a negative binomial here 
 for(i in 1:n.groups){
   for(k in 1:n.species){
-    N.obsJ[i,k] ~ dpois(lambda[i,k]) 
+    N.obsJ[i,k] ~ dpois(lambda[i,k]) #maybe want N.spK instead of lambda, but seems circular??
     
     #prior on abundance of species j in group i#
     lambda[i,k] ~ dgamma(1,1) 
@@ -301,7 +345,7 @@ for(i in 1:n.transects){
 }
 #take the mean of K  
 for(k in 1:n.species){
-  N.spK.mean[k] <- mean(N.spK[,k]) 
+  N.spK.mean[k] <- mean(N.spK[,k]) #providing a mean per transect, n.species (4) x n.transects (301)
 }
 
 #########################BASIC DETECTION COMPONENT#########################
@@ -310,10 +354,10 @@ for(k in 1:n.species){
 #might need a negative binomial here 
 #for(i in 1:n.groups){
 #  for(k in 1:n.species){
-#    N[i,k] ~ dpois(lambda[i,k]) 
+#    N[i,k] ~ dpois(lambda[i,k]) #N.spK instead of lambda
     
 #    # prior on abundance of species j in group i
-#    lambda[i,k] ~ dgamma(1,1) 
+#    lambda[i,k] ~ dgamma(1,1) #N.spK instead of lambda
 #  }
 #}
 
@@ -337,25 +381,27 @@ for(k in 1:n.species){
 
 
 #DATA
-data <- list(ID = ID, M.obs = M.obs, obs = obs, POV = POV, M = M, FF = FF, tr = tr, n.transects = n.transects, n.groups = n.groups, n.observers = n.observers, n.species = n.species, alpha.sp = c(1,1,1,1))
+data <- list(ID = ID, M.obs = M.obs, obs = obs, POV = POV, M = M, FF = FF, tr = tr, n.transects = n.transects, 
+             n.groups = n.groups, n.observers = n.observers, n.species = n.species, alpha.sp = c(1,1,1,1))
 
 #INITIAL VALUES 
 init.pr.spK <- matrix(NA,nrow=n.transects,ncol = n.species)
 for(t in 1:n.transects){
   init.pr.spK[t,] <- c(0.25,0.25,0.25,0.25)
 }
-init.lambda <- matrix(NA,nrow = n.groups,ncol = n.species)
+init.lambda <- matrix(NA,nrow = n.groups,ncol = n.species) #N.spK instead of lambda
 for(i in 1:n.groups){
   for(j in 1:n.species){
-    init.lambda[i,j] <- max(obs[i,j,])+1 
+    init.lambda[i,j] <- max(obs[i,j,])+1 #N.spK instead of lambda
   }
 }
 
-inits.mult<-function(){list(pr.spK = init.pr.spK, beta = rep(1,4), lambda = init.lambda)}
+inits.mult<-function(){list(pr.spK = init.pr.spK, beta = rep(1,4), lambda = init.lambda)} #N.spK instead of lambda
 
 
 #PARAMETERS
-params.mult <- c("pr.spK","beta","p","N.spK.mean","pr.spK.obsJ.mean")
+params.mult <- c("beta","p","N.spK.mean") #for diagnostics
+#params.mult <- c("pr.spK","beta","p","N.spK.mean","pr.spK.obsJ.mean")
 
 #Generate samples from the posterior distribution
 mult.mod<-run.jags(model = "ducks_mult.txt",
@@ -366,3 +412,40 @@ mult.mod<-run.jags(model = "ducks_mult.txt",
                    burnin = 5000,
                    sample = 5000,
                    inits = inits.mult)
+
+#Diagnostics
+mult.mod_mcmc <- as.mcmc.list(mult.mod)
+mult.mcmc <- as.matrix(as.mcmc(mult.mod))
+mult.mod_params <- data.frame(as.matrix(mult.mcmc)) %>%
+  dplyr::select(beta.1., beta.2., beta.3., beta.4., N.spK.mean.1., N.spK.mean.2., N.spK.mean.3., N.spK.mean.4.)
+
+mult_mcmc.slim <- as.mcmc(mult.mod_params)
+mult.mcmc.slim <- as.mcmc.list(mult_mcmc.slim)
+
+mult.mod_ggs <- ggs(mult.mod_mcmc)
+ggs_geweke(mult.mod_ggs)
+ggs_Rhat(mult.mod_ggs)
+
+
+ggs_traceplot(mult.mod_ggs, c("beta"))
+ggs_traceplot(mult.mod_ggs, c("p"))
+ggs_traceplot(mult.mod_ggs, c("pr.spK.obsJ.mean"))
+
+ggs_density(mult.mod_ggs, c("beta"))
+ggs_density(mult.mod_ggs, c("p"))
+ggs_density(mult.mod_ggs, c("pr.spK.obsJ.mean"))
+
+
+mult.df <- data.frame(as.matrix(mult.mcmc))
+mult.summ <- mult.df %>%
+  group_by() %>%
+  summarize_all(mean)
+
+
+out.mult <- data.frame(Parameter = c("beta.1.", "beta.2.", "beta.3.", "beta.4.", "p.1.1.", "p.2.1.", "p.3.1.",
+                                     "p.4.1.", "p.1.2.", "p.2.2.", "p.3.2.", "p.4.2.", "N.spK.mean.1.", "N.spK.mean.2.",
+                                     "N.spK.mean.3.", "N.spK.mean.4."),
+                       Mean = apply(mult.mcmc, 2, mean),
+                       lcl = apply(mult.mcmc, 2, quantile, probs = c(.05)),
+                       ucl = apply(mult.mcmc, 2, quantile, probs = c(.95)))
+
