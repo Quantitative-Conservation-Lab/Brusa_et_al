@@ -2,12 +2,12 @@ set.seed(122)
 
 library(tidyverse)
 library(stringr)
-library(runjags)
+library(jagsUI)
 library(ggmcmc)
 library(ggplot2)
 library(VGAM)
 library(pander)
-library(nimble)
+library(here)
 
 #define parameters and constants 
 transects <- 20
@@ -17,7 +17,6 @@ observers <- 2
 
 
 #generate a vector that looks like "tr" from model
-#groups per transect <- poisson 
 no.tr <- rpois(transects,5)
 groups <- sum(no.tr)
 
@@ -26,35 +25,17 @@ for(i in 1:groups){
   no.gr[i] <- max(rpois(1,8),1)
 }
 
-#Parameters to provide with values - tau.ID, sigma.ID, tau.sp, sigma.sp, mn.pr.ID, lambda, beta, p, mn.pr.sp, tau.ID
 
-# pr.sp = c(0.30, 0.15, 0.20, 0.35) #set values for pr.sp or mn.pr.sp and tau.pr.sp??
-mn.pr.sp = c(-0.00027, -0.00068, -0.00157)
-tau.sp = 0.069
 beta = c(1.19, 0.78, 1.07, 0.94)
 p = matrix(c(0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59), nrow = species, ncol = observers)
-# pr.ID = c(0.25, 0.10, 0.15, 0.40) #set values for pr.ID or mn.pr.ID and tau.ID??
-mn.pr.ID = c(0.00164,  -0.00152,  0.00049)
-tau.ID = 0.070
-alpha.misID = c(0.26, 0.20, 0.33, 0.21)
+pr.sp = c(0.30, 0.15, 0.20, 0.35)
+pr.ID1 = c(0.25, 0.10, 0.15, 0.40)
+pr.ID2 = c(0.30, 0.20, 0.15, 0.30)
 
 
 
-
-
-
-data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, lambda, 
-                          pr.obsJ.spK, p,  alpha.misID, M.obs, M, tr){
-  
-  #Only use following code chunk if not setting values for pr.sp
-  pr.sp[1] <- exp(m.pr.sp[1])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
-  pr.sp[2] <- exp(m.pr.sp[2])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
-  pr.sp[3] <- exp(m.pr.sp[3])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
-  pr.sp[4] <- 1-pr.sp[1]-pr.sp[2]-pr.sp[t,3]
-  
-  m.pr.sp[1] ~ dnorm(mn.pr.sp[1],tau.sp)      
-  m.pr.sp[2] ~ dnorm(mn.pr.sp[2],tau.sp)      
-  m.pr.sp[3] ~ dnorm(mn.pr.sp[3],tau.sp) 
+data_gen_full <- function(beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, observers, groups, 
+                          M.mis, M.obs.mis1, M.obs.mis2, tr){
   
   
   FF.det <- POV.mis <- matrix(NA, nrow = groups, ncol = species)
@@ -66,7 +47,7 @@ data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, l
     }
   }
   
-  M.mis <- apply(POV,1,sum)
+  M.mis <- apply(POV.mis,1,sum)
   
   
   #for each species and observer, first redistribute the individuals in group according to a misID process for each 
@@ -76,25 +57,11 @@ data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, l
   tr <- rep(seq(20), no.tr)
   
   
-  #Only use following code chunk if not setting values for pr.ID
-  pr.ID <- matrix(NA, nrow = observers, ncol = species)
-  for(o in 1:n.observers){
-    pr.ID[o,1] <- exp(m.pr.ID[o,1])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
-    pr.ID[o,2] <- exp(m.pr.ID[o,2])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
-    pr.ID[o,3] <- exp(m.pr.ID[o,3])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
-    pr.ID[o,4] <- 1-pr.ID[o,1]-pr.ID[o,2]-pr.ID[o,3]
-    
-    m.pr.ID[o,1] ~ dnorm(mn.pr.ID[1],tau.ID)      
-    m.pr.ID[o,2] ~ dnorm(mn.pr.ID[2],tau.ID)      
-    m.pr.ID[o,3] ~ dnorm(mn.pr.ID[3],tau.ID)   
-  }
-  
-  
   ID.mis1 <- matrix(NA, nrow = groups, ncol = species)
   
   for(i in 1:groups){
     for(k in 1:species){
-      ID.mis1[i,] <- rbinom(1,tr[i],pr.ID[1,]) 
+      ID.mis1[i,k] <- rbinom(1,tr[i],pr.ID1[k]) 
     }
   }
   
@@ -104,7 +71,7 @@ data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, l
   
   for(i in 1:groups){
     for(k in 1:species){
-      ID.mis2[i,] <- rbinom(1,tr[i],pr.ID[2,]) 
+      ID.mis2[i,k] <- rbinom(1,tr[i],pr.ID2[k]) 
     }
   }
   
@@ -123,80 +90,71 @@ data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, l
     }
   }
   
-  data.sim <- data.frame(ID.mis1, ID.mis2, misID.obs[,,1], misID.obs[,,2], POV, FF, M.obs1, M.obs2, M, tr)
-  colnames(data.sim) <- c("Obs1Spp1", "Obs1Spp2", "Obs1Spp3", "Obs1Spp4", "Obs2Spp1", "Obs2Spp2",
-                          "Obs2Spp3", "Obs2Spp4", "IDObs1.spp1", "IDObs1.spp2", "IDObs1.spp3", "IDObs1.spp4",
-                          "IDObs2.spp1", "IDObs2.spp2", "IDObs2.spp3", "IDObs2.spp4", "POV.spp1", "POV.spp2",
-                          "POV.spp3", "POV.spp4", "FF.spp1", "FF.spp2", "FF.spp3", "FF.spp4", "M.obs1", "M.obs2", "M",
-                          "tr")
+  data.sim <- data.frame(ID.mis1, ID.mis2, ID.det[,,1], ID.det[,,2], POV.mis, FF.det, M.obs.mis1, M.obs.mis2, M.mis, tr)
+  colnames(data.sim) <- c("Obs1Spp1.mis", "Obs1Spp2.mis", "Obs1Spp3.mis", "Obs1Spp4.mis", "Obs2Spp1.mis", "Obs2Spp2.mis",
+                          "Obs2Spp3.mis", "Obs2Spp4.mis", "Obs1.spp1.det", "Obs1.spp2.det", "Obs1.spp3.det", 
+                          "Obs1.spp4.det", "Obs2.spp1.det", "Obs2.spp2.det", "Obs2.spp3.det", "Obs2.spp4.det", 
+                          "POV.spp1", "POV.spp2", "POV.spp3", "POV.spp4", "FF.spp1", "FF.spp2", "FF.spp3", "FF.spp4", 
+                          "M.obs.mis1", "M.obs.mis2", "M.mis", "tr")
   
   return(data.sim)
 }
 
 
-ID.det <- function(n_iter, pr.spK, beta, species, transects, observers, groups, lambda, 
-                   pr.obsJ.spK, p,  alpha.misID, M.obs, M, tr,
+ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, observers, groups, 
+                   M.mis, M.obs.mis1, M.obs.mis2, tr,
                    n.chains = 3, adapt = 5000, burnin = 5000,  sample = 5000
 ){
-  s.mod_summ <- as.list(1:n_iter)
-  computation_time <- as.list(1:n_iter)
-  mcmc_results <- as.list(1:n_iter)
-  sim.dat_list <- as.list(1:n_iter)
+  s.mod_summ <- as.list(1:n_iters)
+  computation_time <- as.list(1:n_iters)
+  mcmc_results <- as.list(1:n_iters)
+  sim.dat_list <- as.list(1:n_iters)
   
   # set progress bar
-  pb <- txtProgressBar(min = 0, max = n_iter, style = 3)
+  pb <- txtProgressBar(min = 0, max = n_iters, style = 3)
   
-  for(n in 1:n_iter) {
+  for(n in 1:n_iters) {
     data.sim <- data_gen_full(beta = beta, 
                               p = p, 
                               species = species,
                               transects = transects,
                               groups = groups,
                               observers = observers,
-                              pr.spK = pr.spK,
-                              M.obs = M.obs,
-                              M = M,
-                              tr = tr,
-                              pr.obsJ.spK = pr.obsJ.spK)
-    FF <- cbind(data.sim$FF.spp1, data.sim$FF.spp2, data.sim$FF.spp3, data.sim$FF.spp4)
-    POV <- cbind(data.sim$POV.spp1, data.sim$POV.spp2, data.sim$POV.spp3, data.sim$POV.spp4)
-    ID.obs1 <- cbind(data.sim$Obs1Spp1, data.sim$Obs1Spp2, data.sim$Obs1Spp3, data.sim$Obs1Spp4)
-    ID.obs2 <- cbind(data.sim$Obs2Spp1, data.sim$Obs2Spp2, data.sim$Obs2Spp3, data.sim$Obs2Spp4)
-    misID <- array(c(ID.obs1, ID.obs2), dim = c(groups, species, observers))
-    misID.obs1 <- cbind(data.sim$IDObs1.spp1, data.sim$IDObs1.spp2, data.sim$IDObs1.spp3, data.sim$IDObs1.spp4)
-    misID.obs2 <- cbind(data.sim$IDObs2.spp1, data.sim$IDObs2.spp2, data.sim$IDObs2.spp3, data.sim$IDObs2.spp4)
-    misID.obs <- array(c(misID.obs1, misID.obs2), dim = c(groups, species, observers))
-    M.obs <- cbind(data.sim$M.obs1, data.sim$M.obs2)
-    M <- data.sim$M
+                              pr.sp = pr.sp,
+                              pr.ID1 = pr.ID1,
+                              pr.ID2 = pr.ID2,
+                              M.obs.mis1 = M.obs.mis1,
+                              M.obs.mis2 = M.obs.mis2,
+                              M.mis = M.mis,
+                              tr = tr)
+    FF.det <- cbind(data.sim$FF.spp1, data.sim$FF.spp2, data.sim$FF.spp3, data.sim$FF.spp4)
+    POV.mis <- cbind(data.sim$POV.spp1, data.sim$POV.spp2, data.sim$POV.spp3, data.sim$POV.spp4)
+    ID.mis1 <- cbind(data.sim$Obs1Spp1.mis, data.sim$Obs1Spp2.mis, data.sim$Obs1Spp3.mis, data.sim$Obs1Spp4.mis)
+    ID.mis2 <- cbind(data.sim$Obs2Spp1.mis, data.sim$Obs2Spp2.mis, data.sim$Obs2Spp3.mis, data.sim$Obs2Spp4.mis)
+    ID.mis <- array(c(ID.mis1, ID.mis2), dim = c(groups, species, observers))
+    ID.det1 <- cbind(data.sim$Obs1.spp1.det, data.sim$Obs1.spp2.det, data.sim$Obs1.spp3.det, data.sim$Obs1.spp4.det)
+    ID.det2 <- cbind(data.sim$Obs2.spp1.det, data.sim$Obs2.spp2.det, data.sim$Obs2.spp3.det, data.sim$Obs2.spp4.det)
+    ID.det <- array(c(ID.det1, ID.det2), dim = c(groups, species, observers))
+    M.obs.mis <- cbind(data.sim$M.obs.mis1, data.sim$M.obs.mis2)
+    M.mis <- data.sim$M.mis
     tr <- data.sim$tr
     
-    sim.params <- c("beta","p")
+    sim.params <- c("pr.ID.pred","pr.sp.pred","mis.ID", "beta", "p", "pr.sp", "pr.ID1", "pr.ID2")
     
-    data <- list(ID = misID, M.obs = M.obs, obs = misID.obs, POV = POV, M = M, FF = FF, tr = tr, 
-                 n.transects = transects, n.groups = groups, n.observers = observers, n.species = species, 
-                 alpha.sp = c(1,1,1,1))
-    init.pr.spK <- matrix(NA,nrow=transects,ncol = species)
-    for(t in 1:transects){
-      init.pr.spK[t,] <- c(0.25,0.25,0.25,0.25)
-    }
-    init.lambda <- matrix(NA,nrow = groups,ncol = species)
-    for(i in 1:groups){
-      for(j in 1:species){
-        init.lambda[i,j] <- max(misID.obs[i,j,])+1 
-      }
-    }
-    inits.mult<-function(){list(pr.spK = init.pr.spK, beta = rep(1,4), lambda = init.lambda)}
+    data <- list(ID.mis = ID.mis, M.obs.mis = M.obs.mis, ID.det = ID.det, POV.mis = POV.mis, M.mis = M.mis, 
+                 FF.det = FF.det, tr.mis = tr, n.transects.mis = transects, n.groups.mis = groups, n.groups.det = groups,
+                 n.observers = observers, n.species = species)
+    inits.duck<-function(){list(N.obsJ=(apply(ID.det,c(1,2),sum)+matrix(rep(1,groups*species),
+                                                                        nrow=groups,ncol=species)))}
     
     start <- Sys.time()
-    setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
-    mult.mod.sim <- run.jags(model = "MultinomialSimModel.txt",
-                             monitor = sim.params,
-                             data = data,
-                             n.chains = n.chains,
-                             adapt = adapt,
-                             burnin = burnin,
-                             sample = sample, 
-                             inits = inits.mult)
+    #Generate samples from the posterior distribution
+    simp.mod.sim = jagsUI::jags(data, inits.duck, sim.params, model.file=here("scripts", "SimpleModSimModel.txt"),
+                    n.chains=n.chains, 
+                    n.iter=sample, 
+                    n.burnin=burnin, 
+                    n.thin=1)
+    
     computation_time[n] <- Sys.time() - start 
     
     # store summary output for iteration i in list  
@@ -217,7 +175,7 @@ ID.det <- function(n_iter, pr.spK, beta, species, transects, observers, groups, 
     mcmc_results[[n]] <- mult.mod.sim$mcmc
     sim.dat_list[[n]] <- data.sim
     setTxtProgressBar(pb, n)
-    print(paste("Completed iteration", n, "of", n_iter))
+    print(paste("Completed iteration", n, "of", n_iters))
   }
   close(pb)
   
@@ -229,9 +187,9 @@ ID.det <- function(n_iter, pr.spK, beta, species, transects, observers, groups, 
 }
 
 start <- Sys.time()
-sim.det.ID <- ID.det(n_iter = 10, burnin = 5000,  sample = 5000, pr.spK = pr.spK, beta = beta, p = p, lambda = lambda,
-                     M.obs = M.obs, M = M, tr = tr, groups = groups, species = species, transects = transects, 
-                     observers = observers, pr.obsJ.spK = pr.obsJ.spK)
+sim.det.ID <- ID.det(n_iters = 1, burnin = 5000,  sample = 6000, beta = beta, p = p, pr.sp = pr.sp, pr.ID1 = pr.ID1,
+                     pr.ID2 = pr.ID2, M.obs.mis1 = M.obs.mis, M.obs.mis2 = M.obs.mis2, M.mis = M.mis, tr = tr, 
+                     groups = groups, species = species, transects = transects, observers = observers)
 
 Sys.time() - start
 
