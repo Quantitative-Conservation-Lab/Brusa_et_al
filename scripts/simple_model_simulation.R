@@ -28,10 +28,10 @@ for(i in 1:groups){
 
 #Parameters to provide with values - tau.ID, sigma.ID, tau.sp, sigma.sp, mn.pr.ID, lambda, beta, p
 
-pr.spK = c(0.30, 0.15, 0.20, 0.35)
+
 beta = c(1.19, 0.78, 1.07, 0.94)
 lambda = 0.49
-pr.obsJ.spK = array(c(0.35, 0.01, 0.18, 0.00, 0.23, 0.97, 0.34, 0.35, 0.21, 0.01, 0.48,
+pr.ID = array(c(0.35, 0.01, 0.18, 0.00, 0.23, 0.97, 0.34, 0.35, 0.21, 0.01, 0.48,
                       0.65, 0.21, 0.01, 0.00, 0.00, 0.80, 0.00, 0.56, 0.37, 0.00, 0.71, 0.16,
                       0.40, 0.01, 0.16, 0.28, 0.00, 0.19, 0.13, 0.00, 0.23), dim = c(species, species, observers))
 p = matrix(c(0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59), nrow = species, ncol = observers)
