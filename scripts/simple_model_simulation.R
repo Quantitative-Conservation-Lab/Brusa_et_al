@@ -26,15 +26,16 @@ for(i in 1:groups){
   no.gr[i] <- max(rpois(1,8),1)
 }
 
-#Parameters to provide with values - tau.ID, sigma.ID, tau.sp, sigma.sp, mn.pr.ID, lambda, beta, p
+#Parameters to provide with values - tau.ID, sigma.ID, tau.sp, sigma.sp, mn.pr.ID, lambda, beta, p, mn.pr.sp, tau.ID
 
-
+# pr.sp = c(0.30, 0.15, 0.20, 0.35) #set values for pr.sp or mn.pr.sp and tau.pr.sp??
+mn.pr.sp = c(-0.00027, -0.00068, -0.00157)
+tau.sp = 0.069
 beta = c(1.19, 0.78, 1.07, 0.94)
-lambda = 0.49
-pr.ID = array(c(0.35, 0.01, 0.18, 0.00, 0.23, 0.97, 0.34, 0.35, 0.21, 0.01, 0.48,
-                      0.65, 0.21, 0.01, 0.00, 0.00, 0.80, 0.00, 0.56, 0.37, 0.00, 0.71, 0.16,
-                      0.40, 0.01, 0.16, 0.28, 0.00, 0.19, 0.13, 0.00, 0.23), dim = c(species, species, observers))
 p = matrix(c(0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59), nrow = species, ncol = observers)
+# pr.ID = c(0.25, 0.10, 0.15, 0.40) #set values for pr.ID or mn.pr.ID and tau.ID??
+mn.pr.ID = c(0.00164,  -0.00152,  0.00049)
+tau.ID = 0.070
 alpha.misID = c(0.26, 0.20, 0.33, 0.21)
 
 
@@ -45,17 +46,27 @@ alpha.misID = c(0.26, 0.20, 0.33, 0.21)
 data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, lambda, 
                           pr.obsJ.spK, p,  alpha.misID, M.obs, M, tr){
   
+  #Only use following code chunk if not setting values for pr.sp
+  pr.sp[1] <- exp(m.pr.sp[1])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
+  pr.sp[2] <- exp(m.pr.sp[2])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
+  pr.sp[3] <- exp(m.pr.sp[3])/(1 + exp(m.pr.sp[1]) + exp(m.pr.sp[2]) + exp(m.pr.sp[3]))
+  pr.sp[4] <- 1-pr.sp[1]-pr.sp[2]-pr.sp[t,3]
   
-  FF <- POV <- matrix(NA, nrow = groups, ncol = species)
+  m.pr.sp[1] ~ dnorm(mn.pr.sp[1],tau.sp)      
+  m.pr.sp[2] ~ dnorm(mn.pr.sp[2],tau.sp)      
+  m.pr.sp[3] ~ dnorm(mn.pr.sp[3],tau.sp) 
+  
+  
+  FF.det <- POV.mis <- matrix(NA, nrow = groups, ncol = species)
   
   for(i in 1:groups){
-    FF[i,] <- rmultinom(1,no.gr[i],pr.spK)
+    FF.det[i,] <- rmultinom(1,no.gr[i],pr.sp)
     for(k in 1:species){
-      POV[i,k] <- round(FF[i,k]*beta[k]*0.9)
+      POV.mis[i,k] <- round(FF.det[i,k]*beta[k]*0.9)
     }
   }
   
-  M <- apply(POV,1,sum)
+  M.mis <- apply(POV,1,sum)
   
   
   #for each species and observer, first redistribute the individuals in group according to a misID process for each 
@@ -65,56 +76,54 @@ data_gen_full <- function(pr.spK, beta, species, transects, observers, groups, l
   tr <- rep(seq(20), no.tr)
   
   
+  #Only use following code chunk if not setting values for pr.ID
+  pr.ID <- matrix(NA, nrow = observers, ncol = species)
+  for(o in 1:n.observers){
+    pr.ID[o,1] <- exp(m.pr.ID[o,1])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
+    pr.ID[o,2] <- exp(m.pr.ID[o,2])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
+    pr.ID[o,3] <- exp(m.pr.ID[o,3])/(1 + exp(m.pr.ID[o,1]) + exp(m.pr.ID[o,2]) + exp(m.pr.ID[o,3]))
+    pr.ID[o,4] <- 1-pr.ID[o,1]-pr.ID[o,2]-pr.ID[o,3]
+    
+    m.pr.ID[o,1] ~ dnorm(mn.pr.ID[1],tau.ID)      
+    m.pr.ID[o,2] ~ dnorm(mn.pr.ID[2],tau.ID)      
+    m.pr.ID[o,3] ~ dnorm(mn.pr.ID[3],tau.ID)   
+  }
   
-  misID.obs <- array(NA, dim = c(groups, species, observers))
+  
+  ID.mis1 <- matrix(NA, nrow = groups, ncol = species)
+  
   for(i in 1:groups){
     for(k in 1:species){
+      ID.mis1[i,] <- rbinom(1,tr[i],pr.ID[1,]) 
+    }
+  }
+  
+  M.obs.mis1 <- apply(ID.mis1,1,sum)
+  
+  ID.mis2 <- matrix(NA, nrow = groups, ncol = species)
+  
+  for(i in 1:groups){
+    for(k in 1:species){
+      ID.mis2[i,] <- rbinom(1,tr[i],pr.ID[2,]) 
+    }
+  }
+  
+  M.obs.mis2 <- apply(ID.mis2,1,sum)
+  
+  
+  ID.mis <- array(c(ID.mis1, ID.mis2), dim = c(groups, species, observers))
+  
+  
+  ID.det <- array(NA, dim = c(groups, species, observers))
+  for(i in 1:groups){
+    for(j in 1:species){
       for(o in 1:observers){
-        misID.obs[i,k,o] <- rbinom(1, tr[i], p[k,o])
+        ID.det[i,j,o] <- rbinom(1, tr[i], p[j,o])
       }
     }
   }
   
-  
-  pr.obsJ <- matrix(NA, nrow = species, ncol = observers)
-  for(o in 1:observers){
-    pr.obsJ[1,o] <- pr.spK[1]*pr.obsJ.spK[1,1,o] + pr.spK[2]*pr.obsJ.spK[1,2,o] +
-      pr.spK[3]*pr.obsJ.spK[1,3,o] + pr.spK[4]*pr.obsJ.spK[1,4,o]
-    
-    pr.obsJ[2,o] <- pr.spK[1]*pr.obsJ.spK[2,1,o] + pr.spK[2]*pr.obsJ.spK[2,2,o] +
-      pr.spK[3]*pr.obsJ.spK[2,3,o] + pr.spK[4]*pr.obsJ.spK[2,4,o]
-    
-    pr.obsJ[3,o] <- pr.spK[1]*pr.obsJ.spK[3,1,o] + pr.spK[2]*pr.obsJ.spK[3,2,o] +
-      pr.spK[3]*pr.obsJ.spK[3,3,o] + pr.spK[4]*pr.obsJ.spK[3,4,o]
-    
-    pr.obsJ[4,o] <- pr.spK[1]*pr.obsJ.spK[4,1,o] + pr.spK[2]*pr.obsJ.spK[4,2,o] +
-      pr.spK[3]*pr.obsJ.spK[4,3,o] + pr.spK[4]*pr.obsJ.spK[4,4,o]
-  }
-  
-  
-  misID1 <- matrix(NA, nrow = groups, ncol = species)
-  
-  for(i in 1:groups){
-    for(k in 1:species){
-      misID1[i,k] <- rbinom(1,tr[i],pr.obsJ[k,1]) 
-    }
-  }
-  
-  M.obs1 <- apply(misID1,1,sum)
-  
-  misID2 <- matrix(NA, nrow = groups, ncol = species)
-  
-  for(i in 1:groups){
-    for(k in 1:species){
-      misID2[i,k] <- rbinom(1,tr[i],pr.obsJ[k,1]) 
-    }
-  }
-  
-  M.obs2 <- apply(misID2,1,sum)
-  
-  
-  misID <- array(c(misID1, misID2), dim = c(groups, species, observers))
-  data.sim <- data.frame(misID1, misID2, misID.obs[,,1], misID.obs[,,2], POV, FF, M.obs1, M.obs2, M, tr)
+  data.sim <- data.frame(ID.mis1, ID.mis2, misID.obs[,,1], misID.obs[,,2], POV, FF, M.obs1, M.obs2, M, tr)
   colnames(data.sim) <- c("Obs1Spp1", "Obs1Spp2", "Obs1Spp3", "Obs1Spp4", "Obs2Spp1", "Obs2Spp2",
                           "Obs2Spp3", "Obs2Spp4", "IDObs1.spp1", "IDObs1.spp2", "IDObs1.spp3", "IDObs1.spp4",
                           "IDObs2.spp1", "IDObs2.spp2", "IDObs2.spp3", "IDObs2.spp4", "POV.spp1", "POV.spp2",
