@@ -101,31 +101,31 @@ data_gen_full <- function(beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, ob
 }
 
 
-ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, observers, groups, 
+ID.det <- function(n_iter, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, observers, groups, 
                    M.mis, M.obs.mis1, M.obs.mis2, tr,
-                   n.chains = 3, adapt = 5000, burnin = 5000,  sample = 5000
+                   n.chains = 3, adapt = 5000, burnin = 5000,  sample = 20000
 ){
-  s.mod_summ <- as.list(1:n_iters)
-  computation_time <- as.list(1:n_iters)
-  mcmc_results <- as.list(1:n_iters)
-  sim.dat_list <- as.list(1:n_iters)
+  s.mod_summ <- as.list(1:n_iter)
+  computation_time <- as.list(1:n_iter)
+  mcmc_results <- as.list(1:n_iter)
+  sim.dat_list <- as.list(1:n_iter)
   
   # set progress bar
-  pb <- txtProgressBar(min = 0, max = n_iters, style = 3)
+  pb <- txtProgressBar(min = 0, max = n_iter, style = 3)
   
-  for(n in 1:n_iters) {
+  for(n in 1:n_iter) {
     data.sim <- data_gen_full(beta = beta, 
                               p = p, 
-                              species = species,
-                              transects = transects,
-                              groups = groups,
-                              observers = observers,
                               pr.sp = pr.sp,
                               pr.ID1 = pr.ID1,
                               pr.ID2 = pr.ID2,
+                              species = species,
+                              transects = transects,
+                              observers = observers,
+                              groups = groups,
+                              M.mis = M.mis,
                               M.obs.mis1 = M.obs.mis1,
                               M.obs.mis2 = M.obs.mis2,
-                              M.mis = M.mis,
                               tr = tr)
     FF.det <- cbind(data.sim$FF.spp1, data.sim$FF.spp2, data.sim$FF.spp3, data.sim$FF.spp4)
     POV.mis <- cbind(data.sim$POV.spp1, data.sim$POV.spp2, data.sim$POV.spp3, data.sim$POV.spp4)
@@ -139,7 +139,7 @@ ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, 
     M.mis <- data.sim$M.mis
     tr <- data.sim$tr
     
-    sim.params <- c("pr.ID.pred","pr.sp.pred","mis.ID", "beta", "p", "pr.sp", "pr.ID1", "pr.ID2")
+    sim.params <- c("beta", "p")
     
     data <- list(ID.mis = ID.mis, M.obs.mis = M.obs.mis, ID.det = ID.det, POV.mis = POV.mis, M.mis = M.mis, 
                  FF.det = FF.det, tr.mis = tr, n.transects.mis = transects, n.groups.mis = groups, n.groups.det = groups,
@@ -158,7 +158,11 @@ ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, 
     computation_time[n] <- Sys.time() - start 
     
     # store summary output for iteration i in list  
-    post_summ <- as.data.frame(summary(mult.mod.sim))
+    post_summ <- as.data.frame(simp.mod.sim$summary)
+    
+    #Remove deviance row
+    d<-dim(post_summ)[1]
+    post_summ<-post_summ[1:(d-1),]
     
     # compare posterior summaries to data generating values to track coverage 
     post_summ$iter <- n
@@ -167,15 +171,15 @@ ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, 
     # bounds for the 95% CrI, not the posterior means...
     dg_values <- c(beta, p)
     
-    post_summ$capture <- as.numeric(dg_values >= post_summ$Lower95 & dg_values <= post_summ$Upper95)
-    post_summ$cri95_width <- post_summ$Upper95 - post_summ$Lower95
+    post_summ$capture <- as.numeric(dg_values >= post_summ$`2.5%` & dg_values <= post_summ$`97.5%`)
+    post_summ$cri95_width <- post_summ$`97.5%` - post_summ$`2.5%`
     
     #save the summary output from this realization in the list
     s.mod_summ[[n]] <- post_summ
-    mcmc_results[[n]] <- mult.mod.sim$mcmc
+    mcmc_results[[n]] <- simp.mod.sim$mcmc
     sim.dat_list[[n]] <- data.sim
     setTxtProgressBar(pb, n)
-    print(paste("Completed iteration", n, "of", n_iters))
+    print(paste("Completed iteration", n, "of", n_iter))
   }
   close(pb)
   
@@ -187,7 +191,7 @@ ID.det <- function(n_iters, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, 
 }
 
 start <- Sys.time()
-sim.det.ID <- ID.det(n_iters = 1, burnin = 5000,  sample = 6000, beta = beta, p = p, pr.sp = pr.sp, pr.ID1 = pr.ID1,
+sim.det.ID <- ID.det(n_iter = 100, burnin = 5000,  sample = 20000, beta = beta, p = p, pr.sp = pr.sp, pr.ID1 = pr.ID1,
                      pr.ID2 = pr.ID2, M.obs.mis1 = M.obs.mis, M.obs.mis2 = M.obs.mis2, M.mis = M.mis, tr = tr, 
                      groups = groups, species = species, transects = transects, observers = observers)
 
@@ -197,12 +201,12 @@ Sys.time() - start
 sim.info <- sim.det.ID$jags_summ %>% 
   group_by(par) %>% 
   summarise(cap_rate = mean(capture), 
-            avg_est = mean(Mean), 
-            ci_width = mean(Upper95 - Lower95), 
-            avg_L95 = mean(Lower95), 
-            avg_U95 = mean(Upper95),
-            avg_rhat = mean(psrf), 
-            avg_neff = mean(SSeff))
+            avg_est = mean(mean), 
+            ci_width = mean(`97.5%` - `2.5%`), 
+            avg_L95 = mean(`2.5%`), 
+            avg_U95 = mean(`97.5%`),
+            avg_rhat = mean(Rhat), 
+            avg_neff = mean(n.eff))
 
 sim.info$dg_values <- c(1.19, 0.78, 1.07, 0.94, 0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59)
 sim.info$avg_bias <- sim.info$avg_est - sim.info$dg_values
