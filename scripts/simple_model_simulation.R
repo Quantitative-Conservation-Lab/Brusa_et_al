@@ -39,13 +39,14 @@ data_gen_full <- function(beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, ob
   
   
   FF.det <- POV.mis <- matrix(NA, nrow = groups, ncol = species)
-  
+
   for(i in 1:groups){
     FF.det[i,] <- rmultinom(1,no.gr[i],pr.sp)
     for(k in 1:species){
       POV.mis[i,k] <- round(FF.det[i,k]*beta[k]*0.9)
     }
   }
+  
   
   M.mis <- apply(POV.mis,1,sum)
   
@@ -139,7 +140,11 @@ ID.det <- function(n_iter, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, o
     M.mis <- data.sim$M.mis
     tr <- data.sim$tr
     
-    sim.params <- c("beta", "p")
+    pr.ID.pred <- apply(cbind(pr.ID1, pr.ID2), 1, mean)
+    
+    pr.sp.pred <- pr.sp
+    
+    sim.params <- c("beta", "p", "pr.sp.pred", "pr.ID.pred")
     
     data <- list(ID.mis = ID.mis, M.obs.mis = M.obs.mis, ID.det = ID.det, POV.mis = POV.mis, M.mis = M.mis, 
                  FF.det = FF.det, tr.mis = tr, n.transects.mis = transects, n.groups.mis = groups, n.groups.det = groups,
@@ -169,7 +174,7 @@ ID.det <- function(n_iter, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, o
     post_summ$par <- c(rownames(post_summ)) 
     # need to test if the data generating values are between the 
     # bounds for the 95% CrI, not the posterior means...
-    dg_values <- c(beta, p)
+    dg_values <- c(beta, p, pr.sp.pred, pr.ID.pred)
     
     post_summ$capture <- as.numeric(dg_values >= post_summ$`2.5%` & dg_values <= post_summ$`97.5%`)
     post_summ$cri95_width <- post_summ$`97.5%` - post_summ$`2.5%`
@@ -191,7 +196,7 @@ ID.det <- function(n_iter, beta, p, pr.sp, pr.ID1, pr.ID2, species, transects, o
 }
 
 start <- Sys.time()
-sim.det.ID <- ID.det(n_iter = 100, burnin = 5000,  sample = 20000, beta = beta, p = p, pr.sp = pr.sp, pr.ID1 = pr.ID1,
+sim.det.ID <- ID.det(n_iter = 1, burnin = 5000,  sample = 20000, beta = beta, p = p, pr.sp = pr.sp, pr.ID1 = pr.ID1,
                      pr.ID2 = pr.ID2, M.obs.mis1 = M.obs.mis, M.obs.mis2 = M.obs.mis2, M.mis = M.mis, tr = tr, 
                      groups = groups, species = species, transects = transects, observers = observers)
 
@@ -208,7 +213,8 @@ sim.info <- sim.det.ID$jags_summ %>%
             avg_rhat = mean(Rhat), 
             avg_neff = mean(n.eff))
 
-sim.info$dg_values <- c(1.19, 0.78, 1.07, 0.94, 0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59)
+sim.info$dg_values <- c(1.19, 0.78, 1.07, 0.94, 0.72, 0.67, 0.67, 0.70, 0.70, 0.72, 0.75, 0.59,
+                        0.275, 0.150, 0.150, 0.350, 0.30, 0.15, 0.20, 0.35)
 sim.info$avg_bias <- sim.info$avg_est - sim.info$dg_values
 pander::pander(sim.info, caption = "simualtion results")
 
