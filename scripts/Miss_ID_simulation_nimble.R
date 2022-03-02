@@ -1,17 +1,17 @@
 library(tidyverse)
 library(nimble)
 
-#Logit function
-logit <- function(pp)
-{
-  log(pp) - log(1-pp)
-}
-
-#Inverse logit function
-expit <- function(eta)
-{
-  1/(1+exp(-eta))
-}
+# #Logit function
+# logit <- function(pp)
+# {
+#   log(pp) - log(1-pp)
+# }
+# 
+# #Inverse logit function
+# expit <- function(eta)
+# {
+#   1/(1+exp(-eta))
+# }
 
 #Generate composition proportions
 comp.fun <- function(nspecies)
@@ -31,7 +31,7 @@ missID.fun <- function(nspecies)
 }
 
 #Number of species
-nspecies <- 4
+nspecies <- 5
 
 #Number of groups
 ngroups <- 1000
@@ -91,7 +91,7 @@ for(i in 1:ngroups){
   
   POV[i,] <- rbinom(n = nspecies, size = FF[i,], prob = alpha)
   
-  tmp <- NULL
+  tmp <- NULL #Maybe save these confusion matrix values 
   
   for(j in 1:nspecies){
     
@@ -107,6 +107,7 @@ for(i in 1:ngroups){
   
 }
 
+
 code <- nimbleCode({
   
   #Priors
@@ -115,82 +116,52 @@ code <- nimbleCode({
   p ~ dunif(0, 1)
   
   #Mean availability probability
-  mu.alpha ~ dunif(0, 1)
+  # mu.alpha ~ dunif(0, 1)
   
-  pi[1:nspecies] ~ ddirch(pi.c[1:nspecies])
+  #pi[1:nspecies] ~ ddirch(pi.c[1:nspecies])
   psi[1:nspecies] ~ ddirch(psi.c[1:nspecies])
   
-  pi.cap <- sum(pi.star[1:nspecies])
-  psi.cap <- sum(psi.star[1:nspecies])
-  
-  phi.psi[1,1] <- 1-phi.psi[2,1]-phi.psi[3,1]-phi.psi[4,1]
-  phi.psi[2,1] <- exp(m.phi.psi[2,1])/(1+exp(m.phi.psi[2,1]) + exp(m.phi.psi[3,1]) + exp(m.phi.psi[4,1]))
-  phi.psi[3,1] <- exp(m.phi.psi[3,1])/(1+exp(m.phi.psi[2,1]) + exp(m.phi.psi[3,1]) + exp(m.phi.psi[4,1]))
-  phi.psi[4,1] <- exp(m.phi.psi[4,1])/(1+exp(m.phi.psi[2,1]) + exp(m.phi.psi[3,1]) + exp(m.phi.psi[4,1]))
-  phi.psi[1,2] <- exp(m.phi.psi[1,2])/(1+exp(m.phi.psi[1,2]) + exp(m.phi.psi[3,2]) + exp(m.phi.psi[4,2]))
-  phi.psi[2,2] <- 1-phi.psi[1,2]-phi.psi[3,2]-phi.psi[4,2]
-  phi.psi[3,2] <- exp(m.phi.psi[3,2])/(1+exp(m.phi.psi[1,2]) + exp(m.phi.psi[3,2]) + exp(m.phi.psi[4,2]))
-  phi.psi[4,2] <- exp(m.phi.psi[4,2])/(1+exp(m.phi.psi[1,2]) + exp(m.phi.psi[3,2]) + exp(m.phi.psi[4,2]))
-  phi.psi[1,3] <- exp(m.phi.psi[1,3])/(1+exp(m.phi.psi[1,3]) + exp(m.phi.psi[2,3]) + exp(m.phi.psi[4,3]))
-  phi.psi[2,3] <- exp(m.phi.psi[2,3])/(1+exp(m.phi.psi[1,3]) + exp(m.phi.psi[2,3]) + exp(m.phi.psi[4,3]))
-  phi.psi[3,3] <- 1-phi.psi[1,3]-phi.psi[2,3]-phi.psi[4,3]
-  phi.psi[4,3] <- exp(m.phi.psi[4,3])/(1+exp(m.phi.psi[1,3]) + exp(m.phi.psi[2,3]) + exp(m.phi.psi[4,3]))
-  phi.psi[1,4] <- exp(m.phi.psi[1,4])/(1+exp(m.phi.psi[1,4]) + exp(m.phi.psi[2,4]) + exp(m.phi.psi[3,4]))
-  phi.psi[2,4] <- exp(m.phi.psi[2,4])/(1+exp(m.phi.psi[1,4]) + exp(m.phi.psi[2,4]) + exp(m.phi.psi[3,4]))
-  phi.psi[3,4] <- exp(m.phi.psi[3,4])/(1+exp(m.phi.psi[1,4]) + exp(m.phi.psi[2,4]) + exp(m.phi.psi[3,4]))
-  phi.psi[4,4] <- 1-phi.psi[1,4]-phi.psi[2,4]-phi.psi[3,4]
-  m.phi.psi[2,1] ~ dnorm(0,0.01)
-  m.phi.psi[3,1] ~ dnorm(0,0.01)
-  m.phi.psi[4,1] ~ dnorm(0,0.01)
-  m.phi.psi[1,2] ~ dnorm(0,0.01)
-  m.phi.psi[3,2] ~ dnorm(0,0.01)
-  m.phi.psi[4,2] ~ dnorm(0,0.01)
-  m.phi.psi[1,3] ~ dnorm(0,0.01)
-  m.phi.psi[2,3] ~ dnorm(0,0.01)
-  m.phi.psi[4,3] ~ dnorm(0,0.01)
-  m.phi.psi[1,4] ~ dnorm(0,0.01)
-  m.phi.psi[2,4] ~ dnorm(0,0.01)
-  m.phi.psi[3,4] ~ dnorm(0,0.01)
-  
   # phi.psi[1,1] <- 1 - sum(phi.psi[2:nspecies,1])
+  phi.psi[1,1] <- 1 - sum(phi.psi[1,2:nspecies])
+  
   # phi.psi[2,2] <- 1 - phi.psi[1,2] - sum(phi.psi[3:nspecies,2])
   # phi.psi[(nspecies-1),(nspecies-1)] <- 1 - sum(phi.psi[1:(nspecies-2),(nspecies-1)]) - phi.psi[nspecies,(nspecies-1)]
-  # phi.psi[nspecies,nspecies] <- 1 - sum(phi.psi[1:(nspecies-1),nspecies])
-  # 
-  # for(j in 2:(nspecies-1)){
-  #   
-  #   phi.psi[j,j] <- 1 - sum(phi.psi[1:(j-1),j]) - sum(phi.psi[(j+1):nspecies,j])
-  #   
-  # }
-  # 
-  # for(k in 1:nspecies){
-  #   
-  #   for(j in (k+1):nspecies){
-  #     
-  #     phi.psi[j,k] <- exp(m.phi.psi[j,k])/(1+exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]))
-  #     
-  #     m.phi.psi[j,k] ~ dnorm(0, 0.01)
-  #     
-  #   }#end j
-  #   
-  #   
-  #   for(j in 1:(k-1)){
-  #     
-  #     phi.psi[j,k] <- exp(m.phi.psi[j,k])/(1+exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]))
-  #     
-  #     m.phi.psi[j,k] ~ dnorm(0, 0.01)
-  #     
-  #   }#end j
-  #   
-  # }# end k
+  
+  #phi.psi[nspecies,nspecies] <- 1 - sum(phi.psi[1:(nspecies-1),nspecies])
+  phi.psi[nspecies,nspecies] <- 1 - sum(phi.psi[nspecies,1:(nspecies-1)])
+
+  for(j in 2:(nspecies-1)){
+
+    # phi.psi[j,j] <- 1 - sum(phi.psi[1:(j-1),j]) - sum(phi.psi[(j+1):nspecies,j])
+    phi.psi[j,j] <- 1 - sum(phi.psi[j,1:(j-1)]) - sum(phi.psi[j,(j+1):nspecies])
+    
+  }
+
+  for(k in 1:nspecies){
+
+    for(j in (k+1):nspecies){
+
+      phi.psi[j,k] <- exp(m.phi.psi[j,k])/(1+exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]))
+      
+      m.phi.psi[j,k] ~ dnorm(0, 0.01)
+
+    }#end j
+
+
+    for(j in 1:(k-1)){
+
+      phi.psi[j,k] <- exp(m.phi.psi[j,k])/(1+exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]) + exp(m.phi.psi[j,k]))
+
+      m.phi.psi[j,k] ~ dnorm(0, 0.01)
+
+    }#end j
+
+  }# end k
   
   for(j in 1:nspecies){
     
-    pi.c[j] <- pi.star[j]/pi.cap
-    psi.c[j] <- psi.star[j]/psi.cap
-    
-    pi.star[j] ~ dgamma(0.01, 0.01)
-    psi.star[j] ~ dgamma(0.01, 0.01)
+    pi.c[j] <- 1
+    psi.c[j] <- 1
     
   }#end j
   
@@ -199,23 +170,23 @@ code <- nimbleCode({
   for(i in 1:ngroups){
     
     #Availability of birds post aircraft contact
-    POV.total[i] ~ dbin(mu.alpha, FF.total[i])
+    #POV.total[i] ~ dbin(mu.alpha, FF.total[i])
     
     #Species composition prior to aircraft contact
-    FF[i,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[i])
+    #FF[i,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[i])
     
     #Species composition post aircraft contact
     POV[i,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[i])
     
     #Latent composition of counts corrected for detection
-    C[i,1:nspecies] ~ dmulti(phi[1:nspecies], POV.total[i])
+    #C[i,1:nspecies] ~ dmulti(phi[1:nspecies], POV.total[i])
     
     for(j in 1:nspecies){
       
       for(o in 1:nobs){
         
         #Observation process (imperfect detection)
-        OBS[i,j,o] ~ dbin(p, C[i,j])
+        OBS[i,j,o] ~ dbin(p * phi[j], POV.total[i])
         
       }#end o
       
@@ -227,20 +198,19 @@ code <- nimbleCode({
     
     for(k in 1:nspecies){
       
-      #phi.psi[j,k] <- phi[k] * psi.phi[j,k] / psi[j]
-      psi.phi[j,k] <- psi[k] * phi.psi[j,k] / phi[j]
+      psi.phi[j,k] <- psi[j] * phi.psi[j,k] / phi[k]
       
-      #psi.hold[j,k] <- phi[k] * psi.phi[j,k]
-      phi.hold[j,k] <- psi[k] * phi.psi[j,k]
+      phi.hold[j,k] <- psi[j] * phi.psi[j,k]
+      
+      beta[j,k] <- phi[k]/psi[j]
       
     }#end k
     
     #Species-specific availability
-    alpha[j] <- psi[j] * mu.alpha / pi[j]
+    #alpha[j] <- psi[j] * mu.alpha / pi[j]
     
     #Species proportion post aircraft contact
-    #psi[j] <- sum(psi.hold[j,1:nspecies])
-    phi[j] <- sum(phi.hold[j,1:nspecies])
+    phi[j] <- sum(phi.hold[1:nspecies,j]) #this should be in a k loop for clarity
     
   }#end j
   
@@ -248,22 +218,34 @@ code <- nimbleCode({
 
 #-Compile data-#
 
-data <- list(FF = FF, FF.total = apply(FF, 1, sum),
-             POV = POV, POV.total = apply(POV, 1, sum),
+data <- list(#FF = FF, 
+             #FF.total = apply(FF, 1, sum),
+             POV = POV, 
+             POV.total = apply(POV, 1, sum),
              OBS = OBS)
 
 constants <- list(nspecies = nspecies, ngroups = ngroups, nobs = 2)
 
 #-Initial values-#
 
-inits <- function(){list(mu.alpha = mean(apply(POV/FF, 2, mean)),
+inits <- function(){list(#mu.alpha = mean(apply(POV/FF, 2, mean)),
                          p = p,
-                         pi = apply(FF/apply(FF, 1, sum), 2, mean),
+                         #pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          psi = apply(POV/apply(POV, 1, sum), 2, mean))}
 
 #-Parameters to save-#
 
-params <- c("p", "pi", "psi", "phi", "psi.phi", "alpha", "mu.alpha")
+params <- c("p",
+            #"pi", 
+            "psi", 
+            "phi",
+            #"alpha", 
+            #"mu.alpha", 
+            "beta",
+            "psi.phi",
+            "phi.psi"
+            
+)
 
 #-MCMC settings-#
 
@@ -274,17 +256,17 @@ model <- nimbleModel(code = code,
 
 MCMCconf <- configureMCMC(model, monitors = params)
 
-MCMCconf$addSampler(target = c("m.phi.psi[2, 1]", "m.phi.psi[3, 1]", "m.phi.psi[4, 1]"),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c("m.phi.psi[1, 2]", "m.phi.psi[3, 2]", "m.phi.psi[4, 2]"),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c("m.phi.psi[1, 3]", "m.phi.psi[2, 3]", "m.phi.psi[4, 3]"),
-                    type = "RW_block")
-
-MCMCconf$addSampler(target = c("m.phi.psi[1, 4]", "m.phi.psi[2, 4]", "m.phi.psi[3, 4]"), 
-                    type = "RW_block")
+# MCMCconf$addSampler(target = c("m.phi.psi[2, 1]", "m.phi.psi[3, 1]", "m.phi.psi[4, 1]"),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c("m.phi.psi[1, 2]", "m.phi.psi[3, 2]", "m.phi.psi[4, 2]"),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c("m.phi.psi[1, 3]", "m.phi.psi[2, 3]", "m.phi.psi[4, 3]"),
+#                     type = "RW_block")
+# 
+# MCMCconf$addSampler(target = c("m.phi.psi[1, 4]", "m.phi.psi[2, 4]", "m.phi.psi[3, 4]"), 
+#                     type = "RW_block")
 
 
 MCMC <- buildMCMC(MCMCconf)
@@ -298,7 +280,7 @@ nt <- 1
 
 #-Run model-#
 
-out <- runMCMC(compiled.model$MCMC,
+out2 <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
