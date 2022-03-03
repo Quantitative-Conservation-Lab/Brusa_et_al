@@ -1,0 +1,146 @@
+model {
+
+#########################SPECIES MIS-ID COMPONENT#########################
+
+#modeled with data cut in half (n.transects.mis and n.groups.mis vs n.transects.det and n.groups.det)
+
+#species composition in observer data with random effects of transect 
+for(t in 1:n.transects.mis){
+  for(o in 1:n.observers){
+    pr.ID[t,o,1] <- exp(m.pr.ID[t,o,1])/(1 + exp(m.pr.ID[t,o,1]) + exp(m.pr.ID[t,o,2]) + exp(m.pr.ID[t,o,3]))
+    pr.ID[t,o,2] <- exp(m.pr.ID[t,o,2])/(1 + exp(m.pr.ID[t,o,1]) + exp(m.pr.ID[t,o,2]) + exp(m.pr.ID[t,o,3]))
+    pr.ID[t,o,3] <- exp(m.pr.ID[t,o,3])/(1 + exp(m.pr.ID[t,o,1]) + exp(m.pr.ID[t,o,2]) + exp(m.pr.ID[t,o,3]))
+    pr.ID[t,o,4] <- 1-pr.ID[t,o,1]-pr.ID[t,o,2]-pr.ID[t,o,3]
+
+    m.pr.ID[t,o,1] ~ dnorm(mn.pr.ID[1],tau.ID)      
+    m.pr.ID[t,o,2] ~ dnorm(mn.pr.ID[2],tau.ID)      
+    m.pr.ID[t,o,3] ~ dnorm(mn.pr.ID[3],tau.ID)      
+  }
+}
+#overall multinomial logit means 
+for(s in 1:(n.species-1)){
+  mn.pr.ID[s] ~ dnorm(0,0.001)
+}
+#overall random effect SDs 
+tau.ID <- pow(sigma.ID,-2)
+sigma.ID ~ dunif(0,5)
+
+#the species ID data by group and observer are multinomial given the proportion of species J in the observations and the total observed      
+for(g in 1:n.groups.mis){
+  for(o in 1:n.observers){
+    ID.mis[g,1:4,o] ~ dmultinom(pr.ID[tr.mis[g],o,],M.obs.mis[g,o])
+  }
+}
+
+#back-predict the overall probability of species J in the observer data 
+for(s in 1:(n.species-1)){
+  pr.ID.pred[s] <- exp(mn.pr.ID[s])/(1+exp(mn.pr.ID[1])+exp(mn.pr.ID[2])+exp(mn.pr.ID[3]))
+}
+pr.ID.pred[4] <- 1-pr.ID.pred[1]-pr.ID.pred[2]-pr.ID.pred[3]
+
+
+#########################SPECIES COMPOSITION COMPONENT(POV)#########################
+
+#species composition in POV data with random effects of transect 
+for(t in 1:n.transects.mis){
+  pr.sp[t,1] <- exp(m.pr.sp[t,1])/(1 + exp(m.pr.sp[t,1]) + exp(m.pr.sp[t,2]) + exp(m.pr.sp[t,3]))
+  pr.sp[t,2] <- exp(m.pr.sp[t,2])/(1 + exp(m.pr.sp[t,1]) + exp(m.pr.sp[t,2]) + exp(m.pr.sp[t,3]))
+  pr.sp[t,3] <- exp(m.pr.sp[t,3])/(1 + exp(m.pr.sp[t,1]) + exp(m.pr.sp[t,2]) + exp(m.pr.sp[t,3]))
+  pr.sp[t,4] <- 1-pr.sp[t,1]-pr.sp[t,2]-pr.sp[t,3]
+
+  m.pr.sp[t,1] ~ dnorm(mn.pr.sp[1],tau.sp)      
+  m.pr.sp[t,2] ~ dnorm(mn.pr.sp[2],tau.sp)      
+  m.pr.sp[t,3] ~ dnorm(mn.pr.sp[3],tau.sp)      
+}
+
+for(s in 1:(n.species-1)){
+  mn.pr.sp[s] ~ dnorm(0,0.001)
+}
+tau.sp <- pow(sigma.sp,-2)
+sigma.sp ~ dunif(0,5)
+
+#POV camera data - multinomial sample from the total number of birds in the group, with pr.spK probabilities   
+for(i in 1:n.groups.mis){
+  POV.mis[i,1:4] ~ dmultinom(pr.sp[tr.mis[i],], M.mis[i])
+}
+
+for(i in 1:(n.species-1)){
+  pr.sp.pred[i] <- exp(mn.pr.sp[i])/(1+exp(mn.pr.sp[1])+exp(mn.pr.sp[2])+exp(mn.pr.sp[3]))
+}
+pr.sp.pred[4] <- 1-pr.sp.pred[1]-pr.sp.pred[2]-pr.sp.pred[3]
+
+
+#########################MIS-ID COMPONENT#########################
+
+#Derived mis-ID ratios 
+#ratio of species J in the observer data to species J in the POV data 
+for(i in 1:n.species){
+  mis.ID[i] <- pr.ID.pred[i]/pr.sp.pred[i]
+}
+
+#Correction abundance estimates from the other half of data for mis-ID 
+for(i in 1:n.groups.det){
+  for(k in 1:n.species){
+    N.spK[i,k] <- N.obsJ[i,k]/mis.ID[k]
+  }
+}
+
+#sum both corrected and uncorrected estimates across groups 
+for(k in 1:n.species){
+  N.spKall[k] <- sum(N.spK[,k])
+  N.obsJall[k] <- sum(N.obsJ[,k])
+}
+
+#########################DETECTION COMPONENT#########################
+  
+#prior for abundance of species k in group i after plane passing (predicted from N-mix)
+#probably need a negative binomial here 
+for(i in 1:n.groups.det){
+  for(k in 1:n.species){
+    #N.obsJ[i,k] ~ dpois(lambda[i,k]) 
+     N.obsJ[i,k] ~ dnegbin(pY[i,k], r[k])
+     pY[i,k] <- r[k]/(r[k]+lambda[i,k])
+    
+  }
+}
+
+#estimation of the abundance of putative species J - Nmixture
+for(j in 1:n.species){
+  for(o in 1:n.observers){
+    for(i in 1:n.groups.det){
+      ID.det[i,j,o] ~ dbinom(p[j,o],N.obsJ[i,j])
+    }
+    #prior for detection probability 
+    p[j,o] ~ dbeta(1,1)
+  }
+}  
+
+#########################AVAILABILITY COMPONENT(FF vs OBSERVERS)#########################
+
+for(i in 1:n.groups.det){
+  for(k in 1:n.species){
+    #FF camera data - abundance of species k in group i prior to plane passing (data), modeled with a mean mu
+    #might need a negative binomial here 
+    #FF.det[i,k] ~ dpois(mu[i,k])
+     FF.det[i,k] ~ dnegbin(psiY[i,k], r[k])
+     psiY[i,k] <- r[k]/(r[k]+mu[i,k])
+    
+    #prior on abundance of species j in group i from FF#
+    #mu[i,k] ~ dgamma(1,1)
+     lambda[i,k] ~ dgamma(1,1) 
+    
+    #the relationship between abundance from observers and abundance before the plane passed, by species
+    #lambda[i,k] <- beta[k] * mu[i,k] #movement * captured in FF
+     mu[i,k] <- beta[k] * lambda[i,k] #movement * process
+  }
+}
+
+#priors on beta and r
+for(k in 1:n.species){
+  beta[k] ~ dunif(0,5)
+  r[k] ~ dgamma(1,1)
+}  
+
+##########################################################################################
+
+}
