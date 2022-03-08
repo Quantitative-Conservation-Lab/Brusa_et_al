@@ -24,8 +24,8 @@ comp.fun <- function(nspecies)
 #Generate miss ID rates
 missID.fun <- function(nspecies)
 {
-  phi.psi <- matrix(runif(nspecies^2,0,0.25),ncol = nspecies, nrow = nspecies)
-  diag(phi.psi) <- runif(nspecies, 0.8, 1)
+  phi.psi <- matrix(runif(nspecies^2,0,0.15),ncol = nspecies, nrow = nspecies)
+  diag(phi.psi) <- runif(nspecies, 0.9, 1)
   phi.psi <- phi.psi/apply(phi.psi, MARGIN = 1, sum)
   return(phi.psi)
 }
@@ -34,7 +34,7 @@ missID.fun <- function(nspecies)
 nspecies <- 5
 
 #Number of groups
-ngroups <- 1000
+ngroups <- 2000
 
 #Community composition
 pi <- comp.fun(nspecies)
@@ -62,10 +62,6 @@ phi.psi <- missID.fun(nspecies)
 phi <- t(phi.psi) %*% psi
 
 #Bayes rule
-# psi.phi <- phi.psi * matrix(rep(psi,nspecies), ncol = nspecies, byrow = T) / matrix(rep(phi,nspecies), ncol = nspecies, byrow = F)
-# I think the above is wrong
-
-
 psi.phi <- matrix(NA, nrow = nspecies, ncol = nspecies)
 for(j in 1:nspecies){
   for(k in 1:nspecies){
@@ -216,13 +212,29 @@ code <- nimbleCode({
   
 })
 
+#-Informed data-#
+phi.psi.informed <- psi.phi.informed <- matrix(NA, nrow = nspecies, ncol = nspecies)
+
+for(i in 1:nspecies){
+  for(k in 1:nspecies){
+    if(phi.psi[i,k] < 0.025){
+      phi.psi.informed[i,k] <- 0
+    }
+    if(psi.phi[i,k] < 0.025){
+      psi.phi.informed[i,k] <- 0
+    }
+  }
+}
+
 #-Compile data-#
 
 data <- list(#FF = FF, 
              #FF.total = apply(FF, 1, sum),
              POV = POV, 
              POV.total = apply(POV, 1, sum),
-             OBS = OBS)
+             OBS = OBS,
+             #phi.psi = phi.psi.informed,
+             psi.phi = psi.phi)
 
 constants <- list(nspecies = nspecies, ngroups = ngroups, nobs = 2)
 
@@ -280,7 +292,7 @@ nt <- 1
 
 #-Run model-#
 
-out2 <- runMCMC(compiled.model$MCMC,
+out1 <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
