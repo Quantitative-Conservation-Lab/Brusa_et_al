@@ -25,7 +25,7 @@ missID.fun <- function(nspecies)
 #-Set Parameters-#
 
 #Number of species
-nspecies <- 10
+nspecies <- 5
 
 #Number of groups
 ngroups <- 1000
@@ -43,14 +43,16 @@ lambda <- lambda.total * pi
 mu.alpha.POV <- runif(1, 0.5, 1)
 sd.alpha.POV <- 0.1
 
-mu.alpha.OBS <- mu.alpha.POV * runif(1,1,1.5)
-sd.alpha.OBS <- 0.1
+observer.offset <- runif(1,1,1.5)
 
 alpha.POV <- rnorm(nspecies, mu.alpha.POV, sd.alpha.POV)
-alpha.OBS <- rnorm(nspecies, mu.alpha.OBS, sd.alpha.OBS)
+alpha.OBS <- alpha.POV * observer.offset
 
 #Expected movement rate
 E.alpha.POV <- sum(pi * alpha.POV)
+
+#Expected movement rate
+E.alpha.OBS <- sum(pi * alpha.OBS)
 
 #Expected community composition (post-contact)
 psi <- alpha.POV * pi / E.alpha.POV 
@@ -117,13 +119,14 @@ code <- nimbleCode({
   #-Priors-#
   
   #Detection probability
-  p ~ dunif(0, 1)
+  #p ~ dunif(0, 1)
+  p ~ dbeta(1, 1)
   
   #Movement rate / availability for point of view camera
-  mu.alpha.POV ~ dnorm(0, 0.01)
+  E.alpha.POV ~ dnorm(0, 0.01)
   
   #Movement rate / availability for observers
-  mu.alpha.OBS ~ dnorm(0, 0.01)
+  E.alpha.OBS ~ dnorm(0, 0.01)
   
   #Composition of point of view camera
   psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
@@ -148,10 +151,10 @@ code <- nimbleCode({
     FF.total[i] ~ dpois(lambda.total)
     
     #Point of view camera total abundance
-    POV.total[i] ~ dpois(lambda.total * mu.alpha.POV)
+    POV.total[i] ~ dpois(lambda.total * E.alpha.POV)
     
     #Total latent abundance (corrected for imperfect detection)
-    N.total[i] ~ dpois(lambda.total * mu.alpha.OBS)
+    N.total[i] ~ dpois(lambda.total * E.alpha.OBS)
     
     for(j in 1:nspecies){
 
@@ -160,6 +163,8 @@ code <- nimbleCode({
         OBS[i,j,o] ~ dbin(p, C[i,j])
 
       }#end o
+      
+      N[i,j] <- N.total[i] * psi[j]
 
     }#end j
     
@@ -170,10 +175,11 @@ code <- nimbleCode({
     pi[j] <- lambda[j]/lambda.total
     
     psi.ones[j] <- 1
-    alpha.POV[j] <- psi[j] * mu.alpha.POV/pi[j]
+    alpha.POV[j] <- psi[j] * E.alpha.POV/pi[j]
     
     phi.ones[j] <- 1
-    alpha.OBS[j] <- phi[j] * mu.alpha.OBS/pi[j]
+    #alpha.OBS[j] <- phi[j] * E.alpha.OBS/pi[j]
+    alpha.OBS[j] <- psi[j] * E.alpha.OBS/pi[j]
     
     log(lambda[j]) <- lambda0[j]
     lambda0[j] ~ dnorm(0, 0.01)
@@ -201,8 +207,8 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          p = p,
                          alpha.POV = alpha.POV,
                          alpha.OBS = alpha.OBS,
-                         mu.alpha.POV = mu.alpha.POV,
-                         mu.alpha.OBS = mu.alpha.OBS,
+                         E.alpha.POV = E.alpha.POV,
+                         E.alpha.OBS = E.alpha.OBS,
                          psi = apply(POV/apply(POV, 1, sum), 2, mean),
                          phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean),
                          C = apply(OBS, c(1,2), max),
@@ -215,13 +221,14 @@ params <- c(
             "p",
             "alpha.POV",
             "alpha.OBS",
-            "mu.alpha.POV",
-            "mu.alpha.OBS",
+            "E.alpha.POV",
+            "E.alpha.OBS",
             "pi",
             "psi",
             "phi",
             "lambda",
-            "lambda.total"
+            "lambda.total",
+            #"N"
 )
 
 #-MCMC settings-#
@@ -249,5 +256,6 @@ out <- runMCMC(compiled.model$MCMC,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
 
+#-Output-#
 
-
+#plot(out[1:3][,!grepl("N", attr(out$chain1, "dimnames")[[2]])])
