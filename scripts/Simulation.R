@@ -72,7 +72,13 @@ for(j in 1:nspecies){
 }
 
 #Detection probability
-p <- runif(1, 0.5, 1)
+p <- runif(1, 0.25, 1)
+
+#Derived product of movement and detection
+E.epsilon <- E.alpha.OBS * p
+
+#Species-specific product of movement and detection
+epsilon <- alpha.OBS * p
 
 #-Simulate data-#
 
@@ -112,6 +118,12 @@ for(i in 1:ngroups){
   
 }
 
+# Genearte samples with no camera data
+
+ <- 500
+
+for(i in 1:nobs)
+
 #-Nimble Code-#
 
 code <- nimbleCode({
@@ -119,8 +131,8 @@ code <- nimbleCode({
   #-Priors-#
   
   #Detection probability
-  #p ~ dunif(0, 1)
-  p ~ dbeta(1, 1)
+  p ~ dunif(0, 1)
+  #p ~ dbeta(1, 1)
   
   #Movement rate / availability for point of view camera
   E.alpha.POV ~ dnorm(0, 0.01)
@@ -133,6 +145,9 @@ code <- nimbleCode({
   
   #Composition of latent abundance (corrected for imperfect detection)
   phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
+  
+  #Derived product of movement and detection
+  E.epsilon <- E.alpha.OBS * p
   
   #-Likelihood-#
   
@@ -178,11 +193,12 @@ code <- nimbleCode({
     alpha.POV[j] <- psi[j] * E.alpha.POV/pi[j]
     
     phi.ones[j] <- 1
-    #alpha.OBS[j] <- phi[j] * E.alpha.OBS/pi[j]
     alpha.OBS[j] <- psi[j] * E.alpha.OBS/pi[j]
     
     log(lambda[j]) <- lambda0[j]
     lambda0[j] ~ dnorm(0, 0.01)
+    
+    epsilon[j] <- alpha.OBS[j] * p
     
   }#end j
   
@@ -229,6 +245,8 @@ params <- c(
             "lambda",
             "lambda.total",
             #"N"
+            "epsilon",
+            "E.epsilon"
 )
 
 #-MCMC settings-#
@@ -259,3 +277,10 @@ out <- runMCMC(compiled.model$MCMC,
 #-Output-#
 
 #plot(out[1:3][,!grepl("N", attr(out$chain1, "dimnames")[[2]])])
+
+#plot(out[1:3][,grep("alpha.OBS\\[1\\]", attr(out$chain1, "dimnames")[[2]])])
+
+output <- round(cbind(unlist(sapply(attr(summary(out)$statistics, "dimnames")[[1]], function(x) eval(parse(text=x)))),
+                summary(out)$statistics[,"Mean"],
+                summary(out)$quantile[,c(1,5)]), digits = 3)
+
