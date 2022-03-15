@@ -120,9 +120,35 @@ for(i in 1:ngroups){
 
 # Genearte samples with no camera data
 
- <- 500
+#Latent abundance and detected corrected counts
+N.pred <- C.pred <- matrix(NA, ncol = nspecies, nrow = ngroups)
 
-for(i in 1:nobs)
+#Observer data
+OBS.pred <- array(NA, dim = c(ngroups, nspecies, 2))
+
+for(i in 1:ngroups){
+  
+  #Latent abundance w/correct ID
+  N.pred[i,] <- rpois(nspecies, lambda * alpha.OBS)
+  
+  confusion.matrix <- NULL
+  
+  for(j in 1:nspecies){
+    
+    confusion.matrix <- cbind(confusion.matrix, rmultinom(1, N.pred[i,j], phi.psi[j,]))
+    
+  }
+  
+  #Latent abundance w/miss ID
+  C.pred[i,] <- apply(confusion.matrix, MARGIN = 1, sum)
+  
+  #Observer 1 data
+  OBS.pred[i,,1] <- rbinom(n = nspecies, size = C.pred[i,], prob = p)
+  
+  #Observer 2 data
+  OBS.pred[i,,2] <- rbinom(n = nspecies, size = C.pred[i,], prob = p)
+  
+}
 
 #-Nimble Code-#
 
@@ -162,6 +188,9 @@ code <- nimbleCode({
     #Composition of latent abundance (corrected for imperfect detection)
     C[i,1:nspecies] ~ dmulti(phi[1:nspecies], N.total[i])
     
+    #Composition of predicted abundance (corrected for imperfect detection)
+    C.pred[i,1:nspecies] ~ dmulti(phi[1:nspecies], N.total.pred[i])
+    
     #Front facing camera total abundance
     FF.total[i] ~ dpois(lambda.total)
     
@@ -171,15 +200,22 @@ code <- nimbleCode({
     #Total latent abundance (corrected for imperfect detection)
     N.total[i] ~ dpois(lambda.total * E.alpha.OBS)
     
+    #Total predicted abundance (corrected for imperfect detection)
+    N.total.pred[i] ~ dpois(lambda.total * E.alpha.OBS)
+    
     for(j in 1:nspecies){
 
       for(o in 1:nobs){
 
         OBS[i,j,o] ~ dbin(p, C[i,j])
+        
+        OBS.pred[i,j,o] ~ dbin(p, C.pred[i,j])
 
       }#end o
       
       N[i,j] <- N.total[i] * psi[j]
+      
+      N.pred[i,j] <- N.total.pred[i] * psi[j]
 
     }#end j
     
@@ -212,7 +248,8 @@ data <- list(FF = FF,
              FF.total = apply(FF, 1, sum),
              POV = POV,
              POV.total = apply(POV, 1, sum),
-             OBS = OBS
+             OBS = OBS,
+             OBS.pred = OBS.pred
              )
 
 constants <- list(nspecies = nspecies, ngroups = ngroups, nobs = 2)
@@ -228,7 +265,9 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          psi = apply(POV/apply(POV, 1, sum), 2, mean),
                          phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean),
                          C = apply(OBS, c(1,2), max),
-                         N.total = apply(apply(OBS, c(1,2), max), 1, sum)
+                         C.pred = apply(OBS.pred, c(1,2), max),
+                         N.total = apply(apply(OBS, c(1,2), max), 1, sum),
+                         N.total.pred = apply(apply(OBS.pred, c(1,2), max), 1, sum)
 )}
 
 #-Parameters to save-#
@@ -246,7 +285,8 @@ params <- c(
             "lambda.total",
             #"N"
             "epsilon",
-            "E.epsilon"
+            "E.epsilon",
+            "N.pred"
 )
 
 #-MCMC settings-#
