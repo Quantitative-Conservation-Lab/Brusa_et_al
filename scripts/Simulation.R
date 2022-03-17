@@ -27,17 +27,14 @@ missID.fun <- function(nspecies)
 #Number of species
 nspecies <- 5
 
-#Number of groups
-ngroups <- 1000
+#Number of sites
+nsites <- 500
 
 #Community composition
 pi <- comp.fun(nspecies)
 
-#Community epected abundance
-lambda.total <- runif(1, 500, 1000)
-
-#Species expected abundance
-lambda <- lambda.total * pi
+#Community expected abundance
+lambda.total <- runif(1, 10000, 20000)
 
 #Movement rate
 mu.alpha.POV <- runif(1, 0.5, 1)
@@ -65,9 +62,9 @@ phi <- t(phi.psi) %*% psi
 
 #Bayes rule
 psi.phi <- matrix(NA, nrow = nspecies, ncol = nspecies)
-for(j in 1:nspecies){
+for(i in 1:nspecies){
   for(k in 1:nspecies){
-    psi.phi[j,k] <- psi[j] * phi.psi[j,k] / phi[k]
+    psi.phi[i,k] <- psi[i] * phi.psi[i,k] / phi[k]
   }
 }
 
@@ -83,70 +80,38 @@ epsilon <- alpha.OBS * p
 #-Simulate data-#
 
 #Front facing camera, point of view camera, latent correct ID abundance, latent miss ID abundance
-FF <- POV <- N <- C <- matrix(NA, ncol = nspecies, nrow = ngroups)
+FF <- POV <- N <- C <- matrix(NA, ncol = nspecies, nrow = nsites)
 
 #Observer data
-OBS <- array(NA, dim = c(ngroups, nspecies, 2))
+OBS <- array(NA, dim = c(nsites, nspecies, 2))
 
-for(i in 1:ngroups){
+for(j in 1:nsites){
   
   #Front facing camera data
-  FF[i,] <- rpois(nspecies, lambda)
+  FF[j,] <- rpois(nspecies, lambda.total * pi)
   
   #Point of view camera data
-  POV[i,] <- rpois(nspecies, lambda * alpha.POV)
+  POV[j,] <- rpois(nspecies, lambda.total * pi * alpha.POV)
   
   #Latent abundance w/correct ID
-  N[i,] <- rpois(nspecies, lambda * alpha.OBS)
+  N[j,] <- rpois(nspecies, lambda.total * pi * alpha.OBS)
   
   confusion.matrix <- NULL
   
-  for(j in 1:nspecies){
+  for(i in 1:nspecies){
     
-    confusion.matrix <- cbind(confusion.matrix, rmultinom(1, N[i,j], phi.psi[j,]))
+    confusion.matrix <- cbind(confusion.matrix, rmultinom(1, N[j,i], phi.psi[i,]))
     
   }
   
   #Latent abundance w/miss ID
-  C[i,] <- apply(confusion.matrix, MARGIN = 1, sum)
+  C[j,] <- apply(confusion.matrix, MARGIN = 1, sum)
   
   #Observer 1 data
-  OBS[i,,1] <- rbinom(n = nspecies, size = C[i,], prob = p)
+  OBS[j,,1] <- rbinom(n = nspecies, size = C[j,], prob = p)
   
   #Observer 2 data
-  OBS[i,,2] <- rbinom(n = nspecies, size = C[i,], prob = p)
-  
-}
-
-# Genearte samples with no camera data
-
-#Latent abundance and detected corrected counts
-N.pred <- C.pred <- matrix(NA, ncol = nspecies, nrow = ngroups)
-
-#Observer data
-OBS.pred <- array(NA, dim = c(ngroups, nspecies, 2))
-
-for(i in 1:ngroups){
-  
-  #Latent abundance w/correct ID
-  N.pred[i,] <- rpois(nspecies, lambda * alpha.OBS)
-  
-  confusion.matrix <- NULL
-  
-  for(j in 1:nspecies){
-    
-    confusion.matrix <- cbind(confusion.matrix, rmultinom(1, N.pred[i,j], phi.psi[j,]))
-    
-  }
-  
-  #Latent abundance w/miss ID
-  C.pred[i,] <- apply(confusion.matrix, MARGIN = 1, sum)
-  
-  #Observer 1 data
-  OBS.pred[i,,1] <- rbinom(n = nspecies, size = C.pred[i,], prob = p)
-  
-  #Observer 2 data
-  OBS.pred[i,,2] <- rbinom(n = nspecies, size = C.pred[i,], prob = p)
+  OBS[j,,2] <- rbinom(n = nspecies, size = C[j,], prob = p)
   
 }
 
@@ -156,16 +121,6 @@ code <- nimbleCode({
   
   #-Priors-#
   
-  #Detection probability
-  p ~ dunif(0, 1)
-  #p ~ dbeta(1, 1)
-  
-  #Movement rate / availability for point of view camera
-  E.alpha.POV ~ dnorm(0, 0.01)
-  
-  #Movement rate / availability for observers
-  E.alpha.OBS ~ dnorm(0, 0.01)
-  
   #Composition of point of view camera
   psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
   
@@ -173,70 +128,45 @@ code <- nimbleCode({
   phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
   
   #Derived product of movement and detection
-  E.epsilon <- E.alpha.OBS * p
+  E.epsilon ~ dnorm(0, 0.01)
   
   #-Likelihood-#
   
-  for(i in 1:ngroups){
+  for(j in 1:nsites){
     
     #Front facing camera composition
-    FF[i,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[i])
+    FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
     
     #Point of view camera composition
-    POV[i,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[i])
-    
-    #Composition of latent abundance (corrected for imperfect detection)
-    C[i,1:nspecies] ~ dmulti(phi[1:nspecies], N.total[i])
-    
-    #Composition of predicted abundance (corrected for imperfect detection)
-    C.pred[i,1:nspecies] ~ dmulti(phi[1:nspecies], N.total.pred[i])
+    POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
     
     #Front facing camera total abundance
-    FF.total[i] ~ dpois(lambda.total)
+    FF.total[j] ~ dpois(lambda.total)
     
-    #Point of view camera total abundance
-    POV.total[i] ~ dpois(lambda.total * E.alpha.POV)
-    
-    #Total latent abundance (corrected for imperfect detection)
-    N.total[i] ~ dpois(lambda.total * E.alpha.OBS)
-    
-    #Total predicted abundance (corrected for imperfect detection)
-    N.total.pred[i] ~ dpois(lambda.total * E.alpha.OBS)
-    
-    for(j in 1:nspecies){
-
-      for(o in 1:nobs){
-
-        OBS[i,j,o] ~ dbin(p, C[i,j])
-        
-        OBS.pred[i,j,o] ~ dbin(p, C.pred[i,j])
-
-      }#end o
+    for(o in 1:nobs){
       
-      N[i,j] <- N.total[i] * psi[j]
+      OBS[j,1:nspecies,o] ~ dmulti(phi[1:nspecies], OBS.total[j,o])
       
-      N.pred[i,j] <- N.total.pred[i] * psi[j]
-
-    }#end j
-    
-  }#end i
-  
-  for(j in 1:nspecies){
-    
-    pi[j] <- lambda[j]/lambda.total
-    
-    psi.ones[j] <- 1
-    alpha.POV[j] <- psi[j] * E.alpha.POV/pi[j]
-    
-    phi.ones[j] <- 1
-    alpha.OBS[j] <- psi[j] * E.alpha.OBS/pi[j]
-    
-    log(lambda[j]) <- lambda0[j]
-    lambda0[j] ~ dnorm(0, 0.01)
-    
-    epsilon[j] <- alpha.OBS[j] * p
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon)
+      
+    }#end o
     
   }#end j
+  
+  for(i in 1:nspecies){
+    
+    pi[i] <- lambda[i]/lambda.total
+    
+    psi.ones[i] <- 1
+    
+    phi.ones[i] <- 1
+    
+    log(lambda[i]) <- lambda0[i]
+    lambda0[i] ~ dnorm(0, 0.01)
+    
+    epsilon[i] <- psi[i] * E.epsilon / pi[i]
+    
+  }#end i
   
   lambda.total <- sum(lambda[1:nspecies])
   
@@ -249,44 +179,30 @@ data <- list(FF = FF,
              POV = POV,
              POV.total = apply(POV, 1, sum),
              OBS = OBS,
-             OBS.pred = OBS.pred
+             OBS.total = apply(OBS, c(1,3), sum)
              )
 
-constants <- list(nspecies = nspecies, ngroups = ngroups, nobs = 2)
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
 
 inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean),
-                         p = p,
-                         alpha.POV = alpha.POV,
-                         alpha.OBS = alpha.OBS,
-                         E.alpha.POV = E.alpha.POV,
-                         E.alpha.OBS = E.alpha.OBS,
+                         E.epsilon = E.epsilon,
+                         epsilon = epsilon,
                          psi = apply(POV/apply(POV, 1, sum), 2, mean),
-                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean),
-                         C = apply(OBS, c(1,2), max),
-                         C.pred = apply(OBS.pred, c(1,2), max),
-                         N.total = apply(apply(OBS, c(1,2), max), 1, sum),
-                         N.total.pred = apply(apply(OBS.pred, c(1,2), max), 1, sum)
+                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean)
 )}
 
 #-Parameters to save-#
 
 params <- c(
-            "p",
-            "alpha.POV",
-            "alpha.OBS",
-            "E.alpha.POV",
-            "E.alpha.OBS",
             "pi",
             "psi",
             "phi",
             "lambda",
             "lambda.total",
-            #"N"
             "epsilon",
-            "E.epsilon",
-            "N.pred"
+            "E.epsilon"
 )
 
 #-MCMC settings-#
@@ -320,7 +236,7 @@ out <- runMCMC(compiled.model$MCMC,
 
 #plot(out[1:3][,grep("alpha.OBS\\[1\\]", attr(out$chain1, "dimnames")[[2]])])
 
-output <- round(cbind(unlist(sapply(attr(summary(out)$statistics, "dimnames")[[1]], function(x) eval(parse(text=x)))),
-                summary(out)$statistics[,"Mean"],
-                summary(out)$quantile[,c(1,5)]), digits = 3)
+# output <- round(cbind(unlist(sapply(attr(summary(out)$statistics, "dimnames")[[1]], function(x) eval(parse(text=x)))),
+#                 summary(out)$statistics[,"Mean"],
+#                 summary(out)$quantile[,c(1,5)]), digits = 3)
 
