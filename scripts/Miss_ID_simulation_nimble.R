@@ -22,10 +22,12 @@ comp.fun <- function(nspecies)
 }
 
 #Generate miss ID rates
-missID.fun <- function(nspecies)
+missID.fun <- function(nspecies, nmissID)
 {
-  phi.psi <- matrix(runif(nspecies^2,0,0.15),ncol = nspecies, nrow = nspecies)
-  diag(phi.psi) <- runif(nspecies, 0.9, 1)
+  #phi.psi <- matrix(runif(nspecies^2,0,0.25),ncol = nspecies, nrow = nspecies)
+  phi.psi <- matrix(0, ncol = nspecies, nrow = nspecies)
+  phi.psi[sample(x = 1:nspecies^2, size = nmissID)] <- runif(nmissID, 0, 0.25)
+  diag(phi.psi) <- runif(nspecies, 0.8, 1)
   phi.psi <- phi.psi/apply(phi.psi, MARGIN = 1, sum)
   return(phi.psi)
 }
@@ -56,7 +58,7 @@ mu.alpha <- sum(pi * alpha)
 psi <- alpha * pi / mu.alpha
 
 #Expected miss ID rate
-phi.psi <- missID.fun(nspecies)
+phi.psi <- missID.fun(nspecies, nmissID = 4)
 
 #Law of total probability
 phi <- t(phi.psi) %*% psi
@@ -109,13 +111,16 @@ code <- nimbleCode({
   #Priors
   
   #Detection probability
-  p ~ dunif(0, 1)
+  #p ~ dunif(0, 1)
   
   #Mean availability probability
   # mu.alpha ~ dunif(0, 1)
   
   #pi[1:nspecies] ~ ddirch(pi.c[1:nspecies])
   psi[1:nspecies] ~ ddirch(psi.c[1:nspecies])
+  
+  #Derived product of movement and detection
+  E.epsilon ~ dnorm(0, 0.01)
   
   # phi.psi[1,1] <- 1 - sum(phi.psi[2:nspecies,1])
   phi.psi[1,1] <- 1 - sum(phi.psi[1,2:nspecies])
@@ -156,10 +161,18 @@ code <- nimbleCode({
   
   for(j in 1:nspecies){
     
-    pi.c[j] <- 1
-    psi.c[j] <- 1
+    #pi.c[j] <- 1
+    
+    pi[j] <- lambda[j]/lambda.total
+    
+    psi.ones[j] <- 1
+    
+    log(lambda[i]) <- lambda0[i]
+    lambda0[i] ~ dnorm(0, 0.01)
     
   }#end j
+  
+  lambda.total <- sum(lambda[1:nspecies])
   
   #Likelihood
   
@@ -169,24 +182,32 @@ code <- nimbleCode({
     #POV.total[i] ~ dbin(mu.alpha, FF.total[i])
     
     #Species composition prior to aircraft contact
-    #FF[i,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[i])
+    FF[i,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[i])
+    
+    #Front facing camera total abundance
+    FF.total[i] ~ dpois(lambda.total)
     
     #Species composition post aircraft contact
     POV[i,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[i])
     
-    #Latent composition of counts corrected for detection
-    #C[i,1:nspecies] ~ dmulti(phi[1:nspecies], POV.total[i])
+    for(o in 1:nobs){
+      
+      OBS[i,1:nspecies,o] ~ dmulti(phi[1:nspecies], OBS.total[i,o])
+      
+      OBS.total[i,o] ~ dpois(lambda.total * E.epsilon)
+      
+    }#end o
     
-    for(j in 1:nspecies){
-      
-      for(o in 1:nobs){
-        
-        #Observation process (imperfect detection)
-        OBS[i,j,o] ~ dbin(p * phi[j], POV.total[i])
-        
-      }#end o
-      
-    }#end j
+    # for(j in 1:nspecies){
+    #   
+    #   for(o in 1:nobs){
+    #     
+    #     #Observation process (imperfect detection)
+    #     OBS[i,j,o] ~ dbin(p * phi[j], POV.total[i])
+    #     
+    #   }#end o
+    #   
+    # }#end j
     
   }#end i
   
@@ -228,11 +249,12 @@ for(i in 1:nspecies){
 
 #-Compile data-#
 
-data <- list(#FF = FF, 
-             #FF.total = apply(FF, 1, sum),
+data <- list(FF = FF, 
+             FF.total = apply(FF, 1, sum),
              POV = POV, 
-             POV.total = apply(POV, 1, sum),
+             #POV.total = apply(POV, 1, sum),
              OBS = OBS,
+             OBS.total = apply(OBS, c(1,3), sum),
              #phi.psi = phi.psi.informed,
              psi.phi = psi.phi)
 
