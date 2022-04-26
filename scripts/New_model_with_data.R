@@ -95,6 +95,66 @@ nspecies <- length(unique(ID.obs$SPECIES))
 nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
 
+#Build a confusion matrix based on proportions of observers to FF camera
+#How to deal with zeros for FF? Maybe can set FF to 1
+#How to deal with proportions > 1??
+#Taking the proportion of the species over the transect
+
+#Not sure if the following lines will become useful...
+
+# proportions <- ID.obs
+# proportions$FF.prop <- proportions$Count.FF/proportions$Count.FF
+# 
+# is.nan.data.frame <- function(x)
+#   do.call(cbind, lapply(x, is.nan))
+# 
+# proportions[is.nan(proportions)] <- 1
+# 
+# proportions$POV.prop <- proportions$Count.POV/proportions$Count.FF
+# 
+# proportions$POV.prop[(!is.finite(proportions$POV.prop))] <- 0
+# 
+# proportions$BM.prop <- proportions$Count.BM/proportions$Count.FF
+# 
+# proportions$BM.prop[(!is.finite(proportions$BM.prop))] <- 0
+# 
+# proportions$TC.prop <- proportions$Count.TC/proportions$Count.FF
+# 
+# proportions$TC.prop[(!is.finite(proportions$TC.prop))] <- 0
+# 
+# prop.POV <- proportions %>%
+#   pivot_wider(id_cols = c(numeric_tran), names_from = SPECIES, values_from = POV.prop,
+#               values_fn = sum, values_fill = 0)
+# 
+# prop.POV <- as.matrix(prop.POV[,-1])
+# 
+# POV <- prop.POV
+# 
+# POV.total <- apply(POV, 1, sum)
+# 
+# prop.BM <- proportions %>%
+#   pivot_wider(id_cols = c(numeric_tran), names_from = SPECIES, values_from = BM.prop,
+#               values_fn = sum, values_fill = 0)
+# 
+# prop.BM <- as.matrix(prop.BM[,-1])
+# 
+# BM <- prop.BM
+# 
+# BM.total <- apply(BM, 1, sum)
+# 
+# prop.TC <- proportions %>%
+#   pivot_wider(id_cols = c(numeric_tran), names_from = SPECIES, values_from = TC.prop,
+#               values_fn = sum, values_fill = 0)
+# 
+# prop.TC <- as.matrix(prop.TC[,-1])
+# 
+# TC <- prop.TC
+# 
+# TC.total <- apply(TC, 1, sum)
+
+
+
+
 
 #-Nimble Code-#
 
@@ -219,8 +279,14 @@ out <- runMCMC(compiled.model$MCMC,
 out.mcmc <- as.mcmc.list(out)
 out.ggs <- ggs(out.mcmc)
 
-ggs_geweke(out.ggs)
-ggs_Rhat(out.ggs)
+out.diag <- ggs_diagnostics(out.ggs)
+out.gelman <- gelman.diag(out.mcmc)
+MCMCtrace(covs_sampsM, params = c("sigma0", "beta.NPGO", "beta.Depth", "beta.ho", "beta.upwell", 
+                                  "sigma.eps.year", "beta.shore7", "beta.shore5", "sigma.eps.pair", 
+                                  "beta.shore9A", "beta.shore1A", "beta.shore6A", "beta.FT", "beta.ST",
+                                  "beta.shore4", "beta.shore6D", "beta.shore8A", "beta.river", "beta.sst",
+                                  "beta.chl", "beta.sal", "beta.BM", "beta.bss.1", "beta.bss.2", "beta.bss.3",
+                                  "r.N", "beta.offshore"))
 
 ggs_traceplot(out.ggs, c("E.epsilon"))
 ggs_traceplot(out.ggs, c("lambda.total"))
@@ -244,5 +310,7 @@ out.birds <- data.frame(#Params = c("E.epsilon", "epsilon.SUSC", "epsilon.BUFF",
                         lcl = apply(params.birds, 2, quantile, probs = c(.05)),
                         ucl = apply(params.birds, 2, quantile, probs = c(.95)),
                         SD = apply(params.birds, 2, sd))
+
+out.summ <- MCMCsummary(mcmc.params)
 
 
