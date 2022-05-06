@@ -17,7 +17,13 @@ sb_df <- sb_df %>% filter(sb_df$SPECIES != "PEFA" & sb_df$SPECIES != "UNSD" & sb
                           & sb_df$SPECIES != "HAPO" & sb_df$SPECIES != "HASE" & sb_df$SPECIES != "BLLA"
                           & sb_df$SPECIES != "UNMA" & sb_df$SPECIES !=  "UNPD" & sb_df$SPECIES !=  "UMSD" 
                           & sb_df$SPECIES != "UNDD" & sb_df$SPECIES != "UNDU" & sb_df$SPECIES !=  "USSD"
-                          & sb_df$SPECIES != "UNSD" & sb_df$SPECIES != "UNSB" & sb_df$SPECIES != "RODO")
+                          & sb_df$SPECIES != "UNSD" & sb_df$SPECIES != "UNSB" & sb_df$SPECIES != "RODO"
+                          & sb_df$SPECIES != "PECO" & sb_df$SPECIES != "UBWG")
+
+#Remove all unknown species records
+sb_df <- sb_df[!grepl("UN", sb_df$SPECIES),]
+
+sb_df$SPECIES <- str_replace(sb_df$SPECIES, "OLDS", "LTDU")
 
 sb_df <- sb_df %>% filter(platform == 1)
 
@@ -43,6 +49,7 @@ ID.obs <- ID.obs %>% filter(SPECIES != "ANMU" & SPECIES != "BAGO" & SPECIES != "
                               SPECIES != "COME" & SPECIES != "DCCO" & SPECIES != "EUWI" & SPECIES != "GWGU" &
                               SPECIES != "NOPI" & SPECIES != "PALO" & SPECIES != "RUDU" & SPECIES != "UNAC" & 
                               SPECIES != "UNGR" & SPECIES != "UNME" & SPECIES != "USAC")
+
 
 ID.BM <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran), names_from = SPECIES, values_from = Count.BM,
@@ -169,7 +176,7 @@ code <- nimbleCode({
   phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
   
   #Derived product of movement and detection
-  E.epsilon ~ dgamma(1, 1)
+  E.epsilon ~ dnorm(0, 0.01)
   
   #-Likelihood-#
   
@@ -190,13 +197,15 @@ code <- nimbleCode({
       
       OBS.total[j,o] ~ dpois(lambda.total * E.epsilon)
       
+      #Not sure how to include BSS at the transect level because there are difference BSS throughout a single transect
+      
     }#end o
     
   }#end j
   
   for(i in 1:nspecies){
     
-    pi[i] <- lambda[i]/(lambda.total)
+    pi[i] <- lambda[i]/lambda.total
     
     psi.ones[i] <- 1
     
@@ -207,6 +216,8 @@ code <- nimbleCode({
     
     epsilon[i] <- psi[i] * E.epsilon / (pi[i])
     
+    missID[i] <- phi[i]/psi[i]
+    
   }#end i
   
   lambda.total <- sum(lambda[1:nspecies])
@@ -215,25 +226,44 @@ code <- nimbleCode({
 
 #-Compile data-#
 
-data <- list(FF = FF, 
-             FF.total = FF.total,
-             POV = POV,
-             POV.total = POV.total,
-             OBS = OBS,
-             OBS.total = OBS.total
+# data <- list(FF = FF, 
+#              FF.total = FF.total,
+#              POV = POV,
+#              POV.total = POV.total,
+#              OBS = OBS,
+#              OBS.total = OBS.total
+# )
+
+data <- list(FF = FF[1:(nsites/2),], 
+             FF.total = apply(FF[1:(nsites/2),], 1, sum),
+             POV = POV[1:(nsites/2),],
+             POV.total = apply(POV[1:(nsites/2),], 1, sum),
+             OBS = OBS[1:(nsites/2),,],
+             OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
 )
 
-constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
+
+# constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
+
+constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
 
 #-Initial values-#
 
-inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
+# inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
+#                          E.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
+#                          *runif(1, 0.25, 1)),
+#                          epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+#                          psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+#                          phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean, 
+#                                      na.rm = TRUE)
+
+inits <- function(){list(pi = apply(FF[1:(nsites/2),]/apply(FF[1:(nsites/2),], 1, sum), 2, mean, na.rm = TRUE),
                          E.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                         *runif(1, 0.25, 1)),
+                                         *runif(1, 0.25, 1)),
                          epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
-                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean, 
-                                     na.rm = TRUE)
+                         psi = apply(POV[1:(nsites/2),]/apply(POV[1:(nsites/2),], 1, sum), 2, mean),
+                         phi = apply(apply(OBS[1:(nsites/2),,], c(1,2), max)/apply(apply(OBS[1:(nsites/2),,], c(1,2), max), 
+                                                                                   1, sum), 2, mean)
 )}
 
 #-Parameters to save-#
@@ -245,7 +275,8 @@ params <- c(
   "lambda",
   "lambda.total",
   "epsilon",
-  "E.epsilon"
+  "E.epsilon",
+  "missID"
 )
 
 #-MCMC settings-#
@@ -281,18 +312,21 @@ out.ggs <- ggs(out.mcmc)
 
 out.diag <- ggs_diagnostics(out.ggs)
 out.gelman <- gelman.diag(out.mcmc)
-MCMCtrace(covs_sampsM, params = c("sigma0", "beta.NPGO", "beta.Depth", "beta.ho", "beta.upwell", 
-                                  "sigma.eps.year", "beta.shore7", "beta.shore5", "sigma.eps.pair", 
-                                  "beta.shore9A", "beta.shore1A", "beta.shore6A", "beta.FT", "beta.ST",
-                                  "beta.shore4", "beta.shore6D", "beta.shore8A", "beta.river", "beta.sst",
-                                  "beta.chl", "beta.sal", "beta.BM", "beta.bss.1", "beta.bss.2", "beta.bss.3",
-                                  "r.N", "beta.offshore"))
+MCMCtrace(out.mcmc, params = c("pi",
+                               "psi",
+                               "phi",
+                               "lambda",
+                               "lambda.total",
+                               "epsilon",
+                               "E.epsilon",
+                               "missID" ))
 
 ggs_traceplot(out.ggs, c("E.epsilon"))
 ggs_traceplot(out.ggs, c("lambda.total"))
 ggs_traceplot(out.ggs, c("phi"))
 ggs_traceplot(out.ggs, c("psi."))
 ggs_traceplot(out.ggs, c("pi."))
+ggs_traceplot(out.ggs, c("missID.1.")) #traceplots look okay...Rhat is high for species 26, UNLM, (1.23)
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 22 parameters
