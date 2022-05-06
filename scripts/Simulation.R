@@ -1,9 +1,14 @@
-#-Packages-#
+#-----------#
+#-Libraries-#
+#-----------#
 
 library(tidyverse)
 library(nimble)
+library(coda)
 
+#-----------#
 #-Functions-#
+#-----------#
 
 #Generate composition proportions
 comp.fun <- function(nspecies)
@@ -24,7 +29,9 @@ missID.fun <- function(nspecies, nmissID)
   return(phi.psi)
 }
 
-#-Set Parameters-#
+#----------------#
+#-Set parameters-#
+#----------------#
 
 #Number of species
 nspecies <- 5
@@ -38,10 +45,14 @@ pi <- comp.fun(nspecies)
 #Community expected abundance
 lambda.total <- runif(1, 10000, 20000)
 
+#Species-specific abundance
+lambda <- lambda.total * pi
+
 #Movement rate
 mu.alpha.POV <- runif(1, 0.5, 1)
 sd.alpha.POV <- 0.1
 
+#Difference in field-of-view
 observer.offset <- runif(1,1,1.5)
 
 alpha.POV <- rnorm(nspecies, mu.alpha.POV, sd.alpha.POV)
@@ -79,13 +90,18 @@ E.epsilon <- E.alpha.OBS * p
 #Species-specific product of movement and detection
 epsilon <- alpha.OBS * p
 
+#---------------#
 #-Simulate data-#
+#---------------#
 
 #Front facing camera, point of view camera, latent correct ID abundance, latent miss ID abundance
 FF <- POV <- N <- C <- matrix(NA, ncol = nspecies, nrow = nsites)
 
 #Observer data
 OBS <- array(NA, dim = c(nsites, nspecies, 2))
+
+#Confusion matrix
+confusion.matrix <- array(NA, dim = c(nsites, nspecies, nspecies))
 
 for(j in 1:nsites){
   
@@ -98,16 +114,16 @@ for(j in 1:nsites){
   #Latent abundance w/correct ID
   N[j,] <- rpois(nspecies, lambda.total * pi * alpha.OBS)
   
-  confusion.matrix <- NULL
-  
   for(i in 1:nspecies){
     
-    confusion.matrix <- cbind(confusion.matrix, rmultinom(1, N[j,i], phi.psi[i,]))
+    # confusion.matrix[j,i,] <- cbind(confusion.matrix, rmultinom(1, N[j,i], phi.psi[i,]))
+    confusion.matrix[j,i,] <- rmultinom(1, N[j,i], phi.psi[i,])
+    
     
   }
   
   #Latent abundance w/miss ID
-  C[j,] <- apply(confusion.matrix, MARGIN = 1, sum)
+  C[j,] <- apply(confusion.matrix[j,,], MARGIN = 2, sum)
   
   #Observer 1 data
   OBS[j,,1] <- rbinom(n = nspecies, size = C[j,], prob = p)
@@ -117,7 +133,201 @@ for(j in 1:nsites){
   
 }
 
-#-Nimble Code-#
+#--------------------#
+#-Estimation Model 1-#
+#--------------------#
+
+code <- nimbleCode({
+  
+  #Priors
+  
+  #Detection probability
+  p ~ dunif(0, 1)
+  
+  #Mean availability probability
+  E.alpha ~ dnorm(0, 0.01)
+  
+  psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
+  
+  #Derived product of movement and detection
+  E.epsilon <- p * E.alpha
+  
+  #Conditional probabilities
+  for(i in 1:nspecies){
+    
+    phi.psi[i,1:nspecies] ~ ddirch(phi.psi.ones[i,1:nspecies])
+    
+    phi.psi.ones[i,1:nspecies] <- 1
+    
+    pi[i] <- lambda[i]/lambda.total
+    
+    psi.ones[i] <- 1
+    
+    log(lambda[i]) <- lambda0[i]
+    lambda0[i] ~ dnorm(0, 0.01)
+    
+  }#end i
+  
+  lambda.total <- sum(lambda[1:nspecies])
+  
+  #Likelihood
+  
+  for(j in 1:nsites){
+    
+    #Front facing camera total abundance
+    FF.total[j] ~ dpois(lambda.total)
+    
+    #Latent available abundance
+    N.total[j] ~ dpois(lambda.total * E.alpha)
+    
+    #Species composition prior to aircraft contact
+    FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
+    
+    #Point of view camera composition
+    POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
+    
+    for(i in 1:nspecies){
+      
+      #Latent species composition  post aircraft contact
+      N[j,i] ~ dbin(psi[i], N.total[j])
+      
+      for(k in 1:nspecies){
+       
+        #Confusion matrix
+        confusion.matrix[j,i,k] ~ dbin(phi.psi[i,k], N[j,i])
+         
+      }#end k
+      
+    }#end i
+    
+    for(o in 1:nobs){
+      
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon)
+      
+      for(k in 1:nspecies){
+        
+        OBS[j,k,o] ~ dbin(p, C[j,k])
+        
+      }#end k
+      
+    }#end o
+    
+    for(k in 1:nspecies){
+      
+      C[j,k] <- sum(confusion.matrix[j,1:nspecies,k])
+      
+    }#end k
+    
+  }#end j
+  
+  for(i in 1:nspecies){
+    
+    for(k in 1:nspecies){
+      
+      psi.phi[i,k] <- psi[i] * phi.psi[i,k] / phi[k]
+      
+      phi.hold[i,k] <- psi[i] * phi.psi[i,k]
+      
+    }#end k
+    
+    #Species-specific availability
+    alpha[i] <- psi[i] * E.alpha / pi[i]
+    
+    #Species-specific movement/detection
+    epsilon[i] <- psi[i] * E.epsilon / pi[i]
+    
+    #Species-specific misidentification
+    missID[i] <- phi[i]/psi[i]
+    
+  }#end j
+  
+  for(k in 1:nspecies){
+    
+    #Species proportion post aircraft contact
+    phi[k] <- sum(phi.hold[1:nspecies,k])
+    
+  }#end k
+  
+})
+
+
+#-Informed data-#
+# phi.psi.informed <- psi.phi.informed <- matrix(NA, nrow = nspecies, ncol = nspecies)
+# 
+# for(i in 1:nspecies){
+#   for(k in 1:nspecies){
+#     if(phi.psi[i,k] < 0.025){
+#       phi.psi.informed[i,k] <- 0
+#     }
+#     if(psi.phi[i,k] < 0.025){
+#       psi.phi.informed[i,k] <- 0
+#     }
+#   }
+# }
+
+#-Compile data-#
+
+data <- list(FF = FF[1:(nsites/2),], 
+             FF.total = apply(FF[1:(nsites/2),], 1, sum),
+             POV = POV[1:(nsites/2),],
+             POV.total = apply(POV[1:(nsites/2),], 1, sum),
+             OBS = OBS[1:(nsites/2),,],
+             OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
+)
+
+constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
+
+#-Initial values-#
+inits <- function(){list(pi = apply(FF[1:(nsites/2),]/apply(FF[1:(nsites/2),], 1, sum), 2, mean),
+                         E.epsilon = E.epsilon,
+                         epsilon = epsilon,
+                         psi = apply(POV[1:(nsites/2),]/apply(POV[1:(nsites/2),], 1, sum), 2, mean),
+                         confusion.matrix = confusion.matrix[1:(nsites/2),,],
+                         C = C[1:(nsites/2),],
+                         N = N[1:(nsites/2),],
+                         N.total = apply(N[1:(nsites/2),], 1, sum)
+)}
+
+#-Parameters to save-#
+
+params <- c(
+  "p", 
+  "psi", 
+  "phi",
+  "E.alpha", 
+  "lambda.total",
+  "lambda",
+  "E.epsilon"
+)
+
+#-MCMC settings-#
+
+model <- nimbleModel(code = code,
+                     constants = constants,
+                     data = data,
+                     inits = inits())
+
+MCMCconf <- configureMCMC(model, monitors = params)
+
+MCMC <- buildMCMC(MCMCconf)
+
+compiled.model <- compileNimble(model, MCMC)
+
+nc <- 3
+ni <- 20000
+nb <- 10000
+nt <- 1
+
+#-Run model-#
+
+out1 <- runMCMC(compiled.model$MCMC,
+                niter = ni, nburnin = nb,
+                nchains = nc, thin = nt,
+                samplesAsCodaMCMC = TRUE)
+
+#--------------------#
+#-Estimation Model 2-#
+#--------------------#
 
 code <- nimbleCode({
   
@@ -180,11 +390,11 @@ code <- nimbleCode({
 
 data <- list(FF = FF[1:(nsites/2),], 
              FF.total = apply(FF[1:(nsites/2),], 1, sum),
-             POV = POV[(nsites/2)(nsites/2),],
+             POV = POV[1:(nsites/2),],
              POV.total = apply(POV[1:(nsites/2),], 1, sum),
              OBS = OBS[1:(nsites/2),,],
              OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
-             )
+)
 
 constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
 
@@ -203,9 +413,8 @@ params <- c(
             "pi",
             "psi",
             "phi",
-            "lambda",
             "lambda.total",
-            "epsilon",
+            "lambda",
             "E.epsilon",
             "missID"
 )
@@ -230,34 +439,14 @@ nt <- 1
 
 #-Run model-#
 
-out <- runMCMC(compiled.model$MCMC,
+out2 <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
 
-#-Output-#
-
-#plot(out[1:3][,!grepl("N", attr(out$chain1, "dimnames")[[2]])])
-
-#plot(out[1:3][,grep("alpha.OBS\\[1\\]", attr(out$chain1, "dimnames")[[2]])])
-
-# output <- round(cbind(unlist(sapply(attr(summary(out)$statistics, "dimnames")[[1]], function(x) eval(parse(text=x)))),
-#                 summary(out)$statistics[,"Mean"],
-#                 summary(out)$quantile[,c(1,5)]), digits = 3)
-
-
-#-Informed priors-#
-
-mean.E.epsilon <- summary(out)[[1]]["E.epsilon","Mean"]
-sd.E.epsilon <- summary(out)[[1]]["E.epsilon","SD"]
-
-mean.epsilon <- summary(out)[[1]][grepl("epsilon\\[", attr(summary(out)[[1]], "dimnames")[[1]]), "Mean"]
-sd.epsilon <- summary(out)[[1]][grepl("epsilon\\[", attr(summary(out)[[1]], "dimnames")[[1]]), "SD"]
-
-mean.missID <- summary(out)[[1]][grepl("missID\\[", attr(summary(out)[[1]], "dimnames")[[1]]), "Mean"]
-sd.missID <- summary(out)[[1]][grepl("missID\\[", attr(summary(out)[[1]], "dimnames")[[1]]), "SD"]
-
+#---------------#
 #-Out of sample-#
+#---------------#
 
 code <- nimbleCode({
   
@@ -291,6 +480,17 @@ code <- nimbleCode({
   
 })
 
+#-Informed priors-#
+
+mean.E.epsilon <- summary(out2)[[1]]["E.epsilon","Mean"]
+sd.E.epsilon <- summary(out2)[[1]]["E.epsilon","SD"]
+
+mean.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
+sd.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
+
+mean.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
+sd.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
+
 #-Compile data-#
 
 data <- list(OBS = OBS[(nsites/2+1):nsites,,],
@@ -313,8 +513,8 @@ inits <- function(){list(lambda.total = lambda.total,
 #-Parameters to save-#
 
 params <- c(
-  "lambda",
-  "lambda.total"
+  "lambda.total",
+  "lambda"
 )
 
 #-MCMC settings-#
@@ -337,7 +537,43 @@ nt <- 1
 
 #-Run model-#
 
-out <- runMCMC(compiled.model$MCMC,
+out3 <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
+
+#--------#
+#-Output-#
+#--------#
+
+
+output <- data.frame(matrix(NA, nrow = 8, ncol = 3))
+
+output[1:3,1] <- "Model1"
+output[4:6,1] <- "Model2"
+output[7:8,1] <- "OOS"
+
+output[1,2] <- (summary(out1)[[1]]["p","Mean"] - p)/p
+output[2,2] <- (summary(out1)[[1]]["E.alpha","Mean"] - E.alpha.OBS)/E.alpha.OBS
+output[3,2] <- (summary(out1)[[1]]["E.epsilon","Mean"] - E.epsilon)/E.epsilon
+output[4,2] <- (summary(out2)[[1]]["E.epsilon","Mean"] - E.epsilon)/E.epsilon
+output[5,2] <- (summary(out2)[[1]]["lambda.total","Mean"] - lambda.total)/lambda.total
+output[6,2] <- mean((summary(out2)[[1]][grepl("lambda\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"] - lambda)/lambda)
+output[7,2] <- (summary(out3)[[1]]["lambda.total","Mean"] - lambda.total)/lambda.total
+output[8,2] <- mean((summary(out3)[[1]][grepl("lambda\\[", attr(summary(out3)[[1]], "dimnames")[[1]]), "Mean"] - lambda)/lambda)
+
+output[1,3] <- gelman.diag(out1[c(1:3)][,"p"])$psrf[,1] < 1.1
+output[2,3] <- gelman.diag(out1[c(1:3)][,"E.alpha"])$psrf[,1] < 1.1
+output[3,3] <- gelman.diag(out1[c(1:3)][,"E.epsilon"])$psrf[,1] < 1.1
+output[4,3] <- gelman.diag(out2[c(1:3)][,"E.epsilon"])$psrf[,1] < 1.1
+output[5,3] <- gelman.diag(out2[c(1:3)][,"lambda.total"])$psrf[,1] < 1.1
+output[6,3] <- all(gelman.diag(out2[c(1:3)][,grepl("lambda\\[", attr(summary(out2)[[1]], "dimnames")[[1]])])$psrf[,1] < 1.1)
+output[7,3] <- gelman.diag(out3[c(1:3)][,"lambda.total"])$psrf[,1] < 1.1
+output[8,3] <- all(gelman.diag(out3[c(1:3)][,grepl("lambda\\[", attr(summary(out3)[[1]], "dimnames")[[1]])])$psrf[,1] < 1.1)
+
+#-------------#
+#-Save output-#
+#-------------#
+
+ID <- length(list.files("./output/")) + 1
+save(output, file = paste("./output/output", ID, ".Rds", sep=""))
