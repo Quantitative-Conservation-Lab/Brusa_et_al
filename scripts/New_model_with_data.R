@@ -326,7 +326,7 @@ ggs_traceplot(out.ggs, c("lambda.total"))
 ggs_traceplot(out.ggs, c("phi"))
 ggs_traceplot(out.ggs, c("psi."))
 ggs_traceplot(out.ggs, c("pi."))
-ggs_traceplot(out.ggs, c("missID.1.")) #traceplots look okay...Rhat is high for species 26, UNLM, (1.23)
+ggs_traceplot(out.ggs, c("missID.1."))
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 22 parameters
