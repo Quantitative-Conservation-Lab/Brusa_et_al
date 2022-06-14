@@ -1,6 +1,5 @@
 library(tidyverse)
 library(nimble)
-library(coda)
 library(ggmcmc)
 library(coda)
 library(here)
@@ -97,6 +96,16 @@ FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
+ID.obs$BSS.1 <- ifelse(ID.obs$BSS.1 == 1, 1, 0)
+ID.obs$BSS.2 <- ifelse(ID.obs$BSS.2 ==1, 2, 0)
+ID.obs$BSS.3 <- ifelse(ID.obs$BSS.3 == 1, 3, 0)
+ID.obs$BSS <- rowSums(ID.obs[,c("BSS.1", "BSS.2", "BSS.3")])
+
+BSS <- ID.obs %>% group_by(numeric_tran) %>%
+  summarise(BSS = mean(BSS))
+
+BSS <- BSS$BSS
+
 
 nspecies <- length(unique(ID.obs$SPECIES))
 nsites <- length(unique(ID.obs$numeric_tran))
@@ -162,7 +171,11 @@ nobs <- 2
 
 
 
+#Most updated model (5/12/22)
 
+
+
+#Less detailed model#
 #-Nimble Code-#
 
 code <- nimbleCode({
@@ -197,7 +210,6 @@ code <- nimbleCode({
       
       OBS.total[j,o] ~ dpois(lambda.total * E.epsilon)
       
-      #Not sure how to include BSS at the transect level because there are difference BSS throughout a single transect
       
     }#end o
     
@@ -216,7 +228,7 @@ code <- nimbleCode({
     
     epsilon[i] <- psi[i] * E.epsilon / (pi[i])
     
-    missID[i] <- phi[i]/psi[i]
+    misID[i] <- phi[i]/psi[i]
     
   }#end i
   
@@ -226,44 +238,27 @@ code <- nimbleCode({
 
 #-Compile data-#
 
-# data <- list(FF = FF, 
-#              FF.total = FF.total,
-#              POV = POV,
-#              POV.total = POV.total,
-#              OBS = OBS,
-#              OBS.total = OBS.total
-# )
-
-data <- list(FF = FF[1:(nsites/2),], 
-             FF.total = apply(FF[1:(nsites/2),], 1, sum),
-             POV = POV[1:(nsites/2),],
-             POV.total = apply(POV[1:(nsites/2),], 1, sum),
-             OBS = OBS[1:(nsites/2),,],
-             OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
+data <- list(FF = FF,
+             FF.total = FF.total,
+             POV = POV,
+             POV.total = POV.total,
+             OBS = OBS,
+             OBS.total = OBS.total
 )
 
 
-# constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
-
-constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
 
-# inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
-#                          E.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-#                          *runif(1, 0.25, 1)),
-#                          epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-#                          psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
-#                          phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean, 
-#                                      na.rm = TRUE)
-
-inits <- function(){list(pi = apply(FF[1:(nsites/2),]/apply(FF[1:(nsites/2),], 1, sum), 2, mean, na.rm = TRUE),
+inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
                          E.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                                         *runif(1, 0.25, 1)),
+                         *runif(1, 0.25, 1)),
                          epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         psi = apply(POV[1:(nsites/2),]/apply(POV[1:(nsites/2),], 1, sum), 2, mean),
-                         phi = apply(apply(OBS[1:(nsites/2),,], c(1,2), max)/apply(apply(OBS[1:(nsites/2),,], c(1,2), max), 
-                                                                                   1, sum), 2, mean)
+                         psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean,
+                                     na.rm = TRUE)
+
 )}
 
 #-Parameters to save-#
@@ -276,7 +271,144 @@ params <- c(
   "lambda.total",
   "epsilon",
   "E.epsilon",
-  "missID"
+  "misID"
+)
+
+#-MCMC settings-#
+
+model <- nimbleModel(code = code,
+                     constants = constants,
+                     data = data,
+                     inits = inits())
+
+MCMCconf <- configureMCMC(model, monitors = params)
+
+MCMC <- buildMCMC(MCMCconf)
+
+compiled.model <- compileNimble(model, MCMC)
+
+nc <- 3
+ni <- 20000
+nb <- 10000
+nt <- 1
+
+
+#-Run model-#
+
+out <- runMCMC(compiled.model$MCMC,
+               niter = ni, nburnin = nb,
+               nchains = nc, thin = nt,
+               samplesAsCodaMCMC = TRUE)
+
+
+#################
+#Model with BSS
+code <- nimbleCode({
+  
+  #-Priors-#
+  
+  #Composition of point of view camera
+  psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
+  #psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies*1:nsites])
+  #dim(psi) <- c(nsites, nspecies)
+  
+  #Composition of latent abundance (corrected for imperfect detection)
+  phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
+  #phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies*1:nsites])
+  #dim(phi) <- c(nsites, nspecies)
+  
+  #Derived product of movement and detection
+  E.epsilon.int ~ dnorm(0, 0.01)
+  beta.BSS ~ dnorm(0, 0.01)
+  
+  #-Likelihood-#
+  
+  for(j in 1:nsites){
+    
+    #Front facing camera composition
+    FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
+    
+    #Point of view camera composition
+    POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
+    
+    #Front facing camera total abundance
+    FF.total ~ dpois(lambda.total)
+    
+    for(o in 1:nobs){
+      
+      OBS[j,1:nspecies,o] ~ dmulti(phi[1:nspecies], OBS.total[j,o])
+      
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[j])
+      
+      
+    }#end o
+    
+    log(E.epsilon[j]) <- E.epsilon.int + beta.BSS*BSS[j]
+    
+  
+  
+  for(i in 1:nspecies){
+    
+    pi[i] <- lambda[i]/lambda.total
+    
+    psi.ones[i] <- 1
+    
+    phi.ones[i] <- 1
+    
+    log(lambda[i]) <- lambda0[i]
+    lambda0[i] ~ dnorm(0, 0.01)
+    
+    
+    epsilon[j,i] <- psi[i] * E.epsilon[j] / (pi[i]) #movement, detection
+    
+    
+    misID[i] <- phi[i]/psi[i] #adjustments in composition (detection, misID), can only break apart with conf matrix
+    
+  
+  }#end i
+  
+  lambda.total <- sum(lambda[1:nspecies])
+}#end j
+})
+
+#-Compile data-#
+
+data <- list(FF = FF,
+             FF.total = FF.total,
+             POV = POV,
+             POV.total = POV.total,
+             OBS = OBS,
+             OBS.total = OBS.total,
+             BSS = BSS
+)
+
+
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
+
+#-Initial values-#
+
+inits <- function(){list(#pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
+                         # E.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
+                         # *runif(1, 0.25, 1)),
+                         epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+                         psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean,
+                                     na.rm = TRUE)
+
+)}
+
+#-Parameters to save-#
+
+params <- c(
+  "pi",
+  "psi",
+  "phi",
+  "lambda",
+  "lambda.total",
+  "epsilon",
+  "E.epsilon",
+  "misID",
+  "beta.BSS"
 )
 
 #-MCMC settings-#
@@ -319,32 +451,51 @@ MCMCtrace(out.mcmc, params = c("pi",
                                "lambda.total",
                                "epsilon",
                                "E.epsilon",
-                               "missID" ))
+                               "misID" ))
 
 ggs_traceplot(out.ggs, c("E.epsilon"))
 ggs_traceplot(out.ggs, c("lambda.total"))
 ggs_traceplot(out.ggs, c("phi"))
 ggs_traceplot(out.ggs, c("psi."))
 ggs_traceplot(out.ggs, c("pi."))
-ggs_traceplot(out.ggs, c("missID.1."))
+ggs_traceplot(out.ggs, c("misID.1."))
 
 #Work with output
-#Check dimensions - 20K iterations minus 10K for burn-in, 22 parameters
+#Check dimensions - 20K iterations minus 10K for burn-in, 122 parameters
 dim(out[[1]])
 mcmc.params <- as.mcmc.list(out)
 params.birds <- data.frame(as.matrix(mcmc.params)) 
 
 params.birds = as.matrix(params.birds)
 
-out.birds <- data.frame(#Params = c("E.epsilon", "epsilon.SUSC", "epsilon.BUFF", "Epsilon.WEGR", "Epsilon.other", 
-                                   # "lambda.SUSC", "lambda.BUFF", "lambda.WEGR", "lambda.other", "lambda.total", 
-                                   # "phi.SUSC", "phi.BUFF", "phi.WEGR", "phi.other", "pi.SUSC", "pi.BUFF", "pi.WEGR", 
-                                   # "pi.other", "psi.SUSC", "psi.BUFF", "psi.WEGR", "psi.other"),
-                        Mean = apply(params.birds, 2, mean),
+out.birds <- data.frame(Mean = apply(params.birds, 2, mean),
                         lcl = apply(params.birds, 2, quantile, probs = c(.05)),
                         ucl = apply(params.birds, 2, quantile, probs = c(.95)),
                         SD = apply(params.birds, 2, sd))
 
 out.summ <- MCMCsummary(mcmc.params)
 
+FF.sums <- apply(FF, 2, sum)
+
+Species <- colnames(FF)
+
+lambdas <- out.birds[c(22:41),]
+lambda.mean <- nsites*lambdas$Mean
+
+epsilons <- out.birds[c(2:21),1]
+comp.ratio <- out.birds[c(63:82),1] / out.birds[c(103:122),1]
+
+birds.adjust <- lambda.mean*(1/(comp.ratio*epsilons))
+
+birds <- as.data.frame(cbind(Species, FF.sums, round(lambda.mean, 2), round(birds.adjust, 2)))
+
+colnames(birds)[2:4] <- c("Counts from FF","Unadjusted N estimate", "Adjusted N estimate")
+row.names(birds) <- NULL
+
+
+#From U.S. Fish and Wildlife Service page for aerial survey video, diving ducks listed are:
+#canvasback, redhead, ring-necked duck, ruddy duck, scaup
+
+#Possible misIDs (but could be movement or FOV)
+#FF COMU, TC GWGU; FF, POV, BM BUFF, TC BUFF and HOGR; 
 
