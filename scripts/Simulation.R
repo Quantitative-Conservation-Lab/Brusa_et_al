@@ -37,7 +37,7 @@ missID.fun <- function(nspecies, nmissID)
 nspecies <- 5
 
 #Number of sites
-nsites <- 1000
+nsites <- 500
 
 #Community composition
 pi <- comp.fun(nspecies)
@@ -252,40 +252,48 @@ code <- nimbleCode({
 
 
 #-Informed data-#
-# phi.psi.informed <- psi.phi.informed <- matrix(NA, nrow = nspecies, ncol = nspecies)
-# 
-# for(i in 1:nspecies){
-#   for(k in 1:nspecies){
-#     if(phi.psi[i,k] < 0.025){
-#       phi.psi.informed[i,k] <- 0
-#     }
-#     if(psi.phi[i,k] < 0.025){
-#       psi.phi.informed[i,k] <- 0
-#     }
-#   }
-# }
+phi.psi.informed <- psi.phi.informed <- matrix(NA, nrow = nspecies, ncol = nspecies)
+
+for(i in 1:nspecies){
+  for(k in 1:nspecies){
+    if(phi.psi[i,k] == 0){
+      phi.psi.informed[i,k] <- 0
+    }
+    if(phi.psi[i,k] == 1){
+      phi.psi.informed[i,k] <- 1
+    }
+    if(psi.phi[i,k] == 0){
+      psi.phi.informed[i,k] <- 0
+    }
+    if(psi.phi[i,k] == 1){
+      psi.phi.informed[i,k] <- 1
+    }
+  }
+}
 
 #-Compile data-#
 
-data <- list(FF = FF[1:(nsites/2),], 
-             FF.total = apply(FF[1:(nsites/2),], 1, sum),
-             POV = POV[1:(nsites/2),],
-             POV.total = apply(POV[1:(nsites/2),], 1, sum),
-             OBS = OBS[1:(nsites/2),,],
-             OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
+data <- list(FF = FF, 
+             FF.total = apply(FF, 1, sum),
+             POV = POV,
+             POV.total = apply(POV, 1, sum),
+             OBS = OBS,
+             OBS.total = apply(OBS, c(1,3), sum),
+             phi.psi = phi.psi.informed,
+             psi.phi = psi.phi.informed
 )
 
-constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
-inits <- function(){list(pi = apply(FF[1:(nsites/2),]/apply(FF[1:(nsites/2),], 1, sum), 2, mean),
+inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          E.epsilon = E.epsilon,
                          epsilon = epsilon,
-                         psi = apply(POV[1:(nsites/2),]/apply(POV[1:(nsites/2),], 1, sum), 2, mean),
-                         confusion.matrix = confusion.matrix[1:(nsites/2),,],
-                         C = C[1:(nsites/2),],
-                         N = N[1:(nsites/2),],
-                         N.total = apply(N[1:(nsites/2),], 1, sum)
+                         psi = apply(POV/apply(POV, 1, sum), 2, mean),
+                         confusion.matrix = confusion.matrix,
+                         C = C,
+                         N = N,
+                         N.total = apply(N, 1, sum)
 )}
 
 #-Parameters to save-#
@@ -294,6 +302,8 @@ params <- c(
   "p", 
   "psi", 
   "phi",
+  "phi.psi",
+  "psi.phi",
   "E.alpha", 
   "lambda.total",
   "lambda",
@@ -334,7 +344,7 @@ code <- nimbleCode({
   #-Priors-#
   
   #Composition of point of view camera
-  psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
+  #psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
   
   #Composition of latent abundance (corrected for imperfect detection)
   phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
@@ -350,7 +360,7 @@ code <- nimbleCode({
     FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
     
     #Point of view camera composition
-    POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
+    #POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
     
     #Front facing camera total abundance
     FF.total[j] ~ dpois(lambda.total)
@@ -369,16 +379,14 @@ code <- nimbleCode({
     
     pi[i] <- lambda[i]/lambda.total
     
-    psi.ones[i] <- 1
+    #psi.ones[i] <- 1
     
     phi.ones[i] <- 1
     
     log(lambda[i]) <- lambda0[i]
     lambda0[i] ~ dnorm(0, 0.01)
     
-    epsilon[i] <- psi[i] * E.epsilon / pi[i]
-    
-    missID[i] <- phi[i]/psi[i]
+    correction[i] <- E.epsilon * phi[i]/pi[i]
     
   }#end i
   
@@ -388,35 +396,37 @@ code <- nimbleCode({
 
 #-Compile data-#
 
-data <- list(FF = FF[1:(nsites/2),], 
-             FF.total = apply(FF[1:(nsites/2),], 1, sum),
-             POV = POV[1:(nsites/2),],
-             POV.total = apply(POV[1:(nsites/2),], 1, sum),
-             OBS = OBS[1:(nsites/2),,],
-             OBS.total = apply(OBS[1:(nsites/2),,], c(1,3), sum)
+data <- list(FF = FF, 
+             FF.total = apply(FF, 1, sum),
+             #POV = POV,
+             #POV.total = apply(POV, 1, sum),
+             OBS = OBS,
+             OBS.total = apply(OBS, c(1,3), sum)
 )
 
-constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
 
-inits <- function(){list(pi = apply(FF[1:(nsites/2),]/apply(FF[1:(nsites/2),], 1, sum), 2, mean),
+inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          E.epsilon = E.epsilon,
-                         epsilon = epsilon,
-                         psi = apply(POV[1:(nsites/2),]/apply(POV[1:(nsites/2),], 1, sum), 2, mean),
-                         phi = apply(apply(OBS[1:(nsites/2),,], c(1,2), max)/apply(apply(OBS[1:(nsites/2),,], c(1,2), max), 1, sum), 2, mean)
+                         #epsilon = epsilon,
+                         #psi = apply(POV/apply(POV, 1, sum), 2, mean),
+                         phi = apply(apply(OBS, c(1,2), max)/apply(apply(OBS, c(1,2), max), 1, sum), 2, mean)
 )}
 
 #-Parameters to save-#
 
 params <- c(
             "pi",
-            "psi",
+            #"psi",
             "phi",
             "lambda.total",
             "lambda",
             "E.epsilon",
-            "missID"
+            #"epsilon",
+            #"missID"
+            "correction"
 )
 
 #-MCMC settings-#
@@ -448,9 +458,51 @@ out2 <- runMCMC(compiled.model$MCMC,
 #-Out of sample-#
 #---------------#
 
+#Community expected abundance
+lambda.total.oos <- runif(1, 10000, 20000)
+
+#Community composition
+pi.oos <- comp.fun(nspecies)
+
+#Species-specific abundance
+lambda.oos <- lambda.total.oos * pi.oos
+
+#Out of sample data
+N <- C <- matrix(NA, ncol = nspecies, nrow = nsites)
+
+#Observer data
+OBS <- array(NA, dim = c(nsites, nspecies, 2))
+
+#Confusion matrix
+confusion.matrix <- array(NA, dim = c(nsites, nspecies, nspecies))
+
+for(j in 1:nsites){
+  
+  #Latent abundance w/correct ID
+  N[j,] <- rpois(nspecies, lambda.total.oos * pi.oos * alpha.OBS)
+  
+  for(i in 1:nspecies){
+    
+    # confusion.matrix[j,i,] <- cbind(confusion.matrix, rmultinom(1, N[j,i], phi.psi[i,]))
+    confusion.matrix[j,i,] <- rmultinom(1, N[j,i], phi.psi[i,])
+    
+    
+  }
+  
+  #Latent abundance w/miss ID
+  C[j,] <- apply(confusion.matrix[j,,], MARGIN = 2, sum)
+  
+  #Observer 1 data
+  OBS[j,,1] <- rbinom(n = nspecies, size = C[j,], prob = p)
+  
+  #Observer 2 data
+  OBS[j,,2] <- rbinom(n = nspecies, size = C[j,], prob = p)
+  
+}
+
 code <- nimbleCode({
   
-  E.epsilon ~ dnorm(mean.E.epsilon, sd = sd.E.epsilon)
+  #E.epsilon ~ dnorm(mean.E.epsilon, sd = sd.E.epsilon)
 
   for(j in 1:nsites){
     
@@ -458,7 +510,9 @@ code <- nimbleCode({
       
       for(i in 1:nspecies){
         
-        OBS[j,i,o] ~ dpois(lambda[i] * missID[i] * epsilon[i])
+        #OBS[j,i,o] ~ dpois(lambda[i] * missID[i] * epsilon[i])
+        
+        OBS[j,i,o] ~ dpois(lambda[i] * correction[i])
         
       }
       
@@ -471,8 +525,10 @@ code <- nimbleCode({
     log(lambda[i]) <- lambda0[i]
     lambda0[i] ~ dnorm(0, 0.01)
     
-    epsilon[i] ~ dnorm(mean.epsilon[i], sd = sd.epsilon[i])
-    missID[i] ~ dnorm(mean.missID[i], sd = sd.missID[i])
+    #epsilon[i] ~ dnorm(mean.epsilon[i], sd = sd.epsilon[i])
+    #missID[i] ~ dnorm(mean.missID[i], sd = sd.missID[i])
+    
+    correction[i] ~ dnorm(mean.correction[i], sd = sd.correction[i])
 
   }#end i
   
@@ -482,32 +538,37 @@ code <- nimbleCode({
 
 #-Informed priors-#
 
-mean.E.epsilon <- summary(out2)[[1]]["E.epsilon","Mean"]
-sd.E.epsilon <- summary(out2)[[1]]["E.epsilon","SD"]
+# mean.E.epsilon <- summary(out2)[[1]]["E.epsilon","Mean"]
+# sd.E.epsilon <- summary(out2)[[1]]["E.epsilon","SD"]
+# 
+# mean.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
+# sd.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
+# 
+# mean.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
+# sd.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
 
-mean.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
-sd.epsilon <- summary(out2)[[1]][grepl("epsilon\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
-
-mean.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
-sd.missID <- summary(out2)[[1]][grepl("missID\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
+mean.correction <- summary(out2)[[1]][grepl("correction\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"]
+sd.correction <- summary(out2)[[1]][grepl("correction\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "SD"]
 
 #-Compile data-#
 
-data <- list(OBS = OBS[(nsites/2+1):nsites,,],
-             mean.E.epsilon = mean.E.epsilon,
-             sd.E.epsilon = sd.E.epsilon,
-             mean.epsilon = mean.epsilon,
-             sd.epsilon = sd.epsilon,
-             mean.missID = mean.missID, 
-             sd.missID = sd.missID
+data <- list(OBS = OBS,
+             mean.correction = mean.correction,
+             sd.correction = sd.correction
+             # mean.E.epsilon = mean.E.epsilon,
+             # sd.E.epsilon = sd.E.epsilon,
+             # mean.epsilon = mean.epsilon,
+             # sd.epsilon = sd.epsilon,
+             # mean.missID = mean.missID, 
+             # sd.missID = sd.missID
 )
 
-constants <- list(nspecies = nspecies, nsites = nsites/2, nobs = 2)
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
 
-inits <- function(){list(lambda.total = lambda.total,
-                         lambda = lambda.total * pi
+inits <- function(){list(lambda.total = lambda.total.oos,
+                         lambda = lambda.oos
 )}
 
 #-Parameters to save-#
@@ -559,8 +620,8 @@ output[3,2] <- (summary(out1)[[1]]["E.epsilon","Mean"] - E.epsilon)/E.epsilon
 output[4,2] <- (summary(out2)[[1]]["E.epsilon","Mean"] - E.epsilon)/E.epsilon
 output[5,2] <- (summary(out2)[[1]]["lambda.total","Mean"] - lambda.total)/lambda.total
 output[6,2] <- mean((summary(out2)[[1]][grepl("lambda\\[", attr(summary(out2)[[1]], "dimnames")[[1]]), "Mean"] - lambda)/lambda)
-output[7,2] <- (summary(out3)[[1]]["lambda.total","Mean"] - lambda.total)/lambda.total
-output[8,2] <- mean((summary(out3)[[1]][grepl("lambda\\[", attr(summary(out3)[[1]], "dimnames")[[1]]), "Mean"] - lambda)/lambda)
+output[7,2] <- (summary(out3)[[1]]["lambda.total","Mean"] - lambda.total.oos)/lambda.total.oos
+output[8,2] <- mean((summary(out3)[[1]][grepl("lambda\\[", attr(summary(out3)[[1]], "dimnames")[[1]]), "Mean"] - lambda.oos)/lambda.oos)
 
 output[1,3] <- gelman.diag(out1[c(1:3)][,"p"])$psrf[,1] < 1.1
 output[2,3] <- gelman.diag(out1[c(1:3)][,"E.alpha"])$psrf[,1] < 1.1
