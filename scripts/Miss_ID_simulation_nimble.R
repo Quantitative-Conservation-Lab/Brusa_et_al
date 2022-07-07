@@ -167,8 +167,8 @@ code <- nimbleCode({
     
     psi.ones[j] <- 1
     
-    log(lambda[i]) <- lambda0[i]
-    lambda0[i] ~ dnorm(0, 0.01)
+    log(lambda[j]) <- lambda0[j]
+    lambda0[j] ~ dnorm(0, 0.01)
     
   }#end j
   
@@ -263,13 +263,13 @@ constants <- list(nspecies = nspecies, ngroups = ngroups, nobs = 2)
 #-Initial values-#
 
 inits <- function(){list(#mu.alpha = mean(apply(POV/FF, 2, mean)),
-                         p = p,
+                         E.epsilon = E.epsilon,
                          #pi = apply(FF/apply(FF, 1, sum), 2, mean),
                          psi = apply(POV/apply(POV, 1, sum), 2, mean))}
 
 #-Parameters to save-#
 
-params <- c("p",
+params <- c(#"p",
             #"pi", 
             "psi", 
             "phi",
@@ -277,7 +277,10 @@ params <- c("p",
             #"mu.alpha", 
             "beta",
             "psi.phi",
-            "phi.psi"
+            "phi.psi",
+            "lambda.total",
+            "lambda",
+            "E.epsilon"
             
 )
 

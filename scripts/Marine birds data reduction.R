@@ -94,13 +94,15 @@ code <- nimbleCode({
   
   #-Priors-#
   
-  #Composition of point of view camera
-  psi[1:nspecies] ~ ddirch(psi.ones[1:nspecies])
-  
   #Composition of latent abundance (corrected for imperfect detection)
-  #phi[1:nspecies] ~ ddirch(phi.ones[1:nspecies])
+
   for(o in 1:nobs){
-    phi[1:nspecies, o] ~ ddirch(phi.ones[1:nspecies,o])
+    phi[1:(nspecies+1), o] ~ ddirch(phi.ones[1:(nspecies+1),o])
+    
+    for(i in 1:(nspecies+1)){
+      phi.ones[i,o] <- 1
+    }
+
   }
   
   #Derived product of movement and detection
@@ -115,19 +117,14 @@ code <- nimbleCode({
     #Front facing camera composition
     FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
     
-    #Point of view camera composition
-    POV[j,1:nspecies] ~ dmulti(psi[1:nspecies], POV.total[j])
-    
     #Front facing camera total abundance
     FF.total[j] ~ dpois(lambda.total)
     
     for(o in 1:nobs){
       
-      OBS[j,1:nspecies,o] ~ dmulti(phi[1:nspecies,o], OBS.total[j,o])
+      OBS[j,1:(nspecies+1),o] ~ dmulti(phi[1:(nspecies+1),o], OBS.total[j,o])
       
       OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[o])
-      
-      OBS.total[j,i,o] ~ dpois(lambda.total * correction[i,o])
       
     }#end o
     
@@ -137,24 +134,18 @@ code <- nimbleCode({
     
     pi[i] <- lambda[i]/lambda.total
     
-    psi.ones[i] <- 1
-    
-    for(o in 1:nobs){
-      phi.ones[i,o] <- 1
-    }
-    
-    #phi.ones[i] <- 1 
    }
 
      
   for(i in 1:nspecies){
+    
     log(lambda[i]) <- lambda0[i]
     lambda0[i] ~ dnorm(0, 0.01)
-    
+
     for(o in 1:nobs){
-    epsilon[i] <- psi[i] * E.epsilon[o] / (pi[i])
-    misID[i,o] <- phi[i,o]/psi[i]
+      
     correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i]
+    
     }#end o
   }#end i
   
@@ -167,8 +158,8 @@ code <- nimbleCode({
 
 data <- list(FF = FF,
              FF.total = FF.total,
-             POV = POV,
-             POV.total = POV.total,
+             #POV = POV,
+             #POV.total = POV.total,
              OBS = OBS,
              OBS.total = OBS.total
 )
@@ -185,9 +176,9 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE)
                          #                 *runif(1, 0.25, 1))),
                          E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
                                          *runif(1, 0.25, 1)), 2),
-                         epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+                         #psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
                                      na.rm = TRUE)
 )}
@@ -196,13 +187,14 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE)
 
 params <- c(
   "pi",
-  "psi",
+  #"psi",
   "phi",
   "lambda",
   "lambda.total",
-  "epsilon",
+  #"epsilon",
   "E.epsilon",
-  "misID"
+  #"misID"
+  "correction"
 )
 
 #-MCMC settings-#
