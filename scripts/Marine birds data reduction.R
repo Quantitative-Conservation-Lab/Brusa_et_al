@@ -35,6 +35,9 @@ num.gr <- data.frame(TransectGroup = grps,
 
 ID.obs <- ID.obs %>% left_join(x = ID.obs, y = num.gr, by = "TransectGroup")
 
+ID.obs$SPECIES[str_sub(ID.obs$SPECIES,start = 1, end = 1) == "U"] <- "Z.UNK"
+ID.obs$sp.group[str_sub(ID.obs$sp.group,start = 1, end = 1) == "U"] <- "Z.UNK"
+
 
 ID.BM <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran), names_from = sp.group, values_from = Count.BM,
@@ -43,12 +46,17 @@ ID.BM <- ID.obs %>%
 
 ID.BM <- as.matrix(ID.BM[,-1])
 
+ID.BM <- ID.BM[,order(colnames(ID.BM))]
+
+
 ID.TC <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran), names_from = sp.group, values_from = Count.TC,
               values_fn = sum, values_fill = 0)
 
 
 ID.TC <- as.matrix(ID.TC[,-1])
+
+ID.TC <- ID.TC[,order(colnames(ID.TC))]
 
 OBS <- array(c(ID.BM, ID.TC), dim = c(nrow(ID.BM), ncol(ID.BM), 2))
 
@@ -66,6 +74,8 @@ ID.POV <- ID.obs %>%
 
 ID.POV <- as.matrix(ID.POV[,-1])
 
+ID.POV <- ID.POV[,order(colnames(ID.POV))]
+
 POV <- ID.POV
 
 POV.total <- apply(POV, 1, sum)
@@ -77,12 +87,14 @@ ID.FF <- ID.obs %>%
 
 ID.FF <- as.matrix(ID.FF[,-1])
 
+ID.FF <- ID.FF[,order(colnames(ID.FF))]
+
 FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
-
-nspecies <- length(unique(ID.obs$sp.group))
+ID.obs <- ID.obs[order(ID.obs$sp.group),]
+nspecies <- length(unique(ID.obs$sp.group)) -1
 nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
 
@@ -218,19 +230,19 @@ nt <- 1
 
 #-Run model-#
 
-out <- runMCMC(compiled.model$MCMC,
+s.out <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
                nchains = nc, thin = nt,
                samplesAsCodaMCMC = TRUE)
 
 
 #Diagnostics
-out.mcmc <- as.mcmc.list(out)
-out.ggs <- ggs(out.mcmc)
+s.out.mcmc <- as.mcmc.list(s.out)
+s.out.ggs <- ggs(s.out.mcmc)
 
-out.diag <- ggs_diagnostics(out.ggs)
-out.gelman <- gelman.diag(out.mcmc)
-MCMCtrace(out.mcmc, params = c("pi",
+s.out.diag <- ggs_diagnostics(s.out.ggs)
+s.out.gelman <- gelman.diag(s.out.mcmc)
+MCMCtrace(s.out.mcmc, params = c("pi",
                                "psi",
                                "phi",
                                "lambda",
@@ -241,37 +253,318 @@ MCMCtrace(out.mcmc, params = c("pi",
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
-dim(out[[1]])
-mcmc.params <- as.mcmc.list(out)
-params.groups <- data.frame(as.matrix(mcmc.params)) 
+dim(s.out[[1]])
+s.mcmc.params <- as.mcmc.list(s.out)
+s.params.groups <- data.frame(as.matrix(s.mcmc.params)) 
 
-params.groups = as.matrix(params.groups)
+s.params.groups = as.matrix(s.params.groups)
 
-out.groups <- data.frame(
-  Mean = apply(params.groups, 2, mean),
-  lcl = apply(params.groups, 2, quantile, probs = c(.05)),
-  ucl = apply(params.groups, 2, quantile, probs = c(.95)),
-  SD = apply(params.groups, 2, sd))
+s.out.groups <- data.frame(
+  Mean = apply(s.params.groups, 2, mean),
+  lcl = apply(s.params.groups, 2, quantile, probs = c(.05)),
+  ucl = apply(s.params.groups, 2, quantile, probs = c(.95)),
+  SD = apply(s.params.groups, 2, sd))
 
-out.g.summ <- MCMCsummary(mcmc.params)
+s.out.g.summ <- MCMCsummary(s.mcmc.params)
+
+FF.s.sums <- apply(FF, 2, sum)
+
+Species <- colnames(FF)
+
+lambdas.s <- s.out.groups[c(11:18),]
+lambda.mean.s <- nsites*lambdas.s$Mean
+
+epsilons.s <- s.out.groups[c(3:10),1]
+comp.ratio.s <- s.out.groups[c(36:51),1] / s.out.groups[c(60:67),1] #phi/psi
+
+birds.adjust.s <- lambda.mean.s*(1/(comp.ratio.s*epsilons.s))
+
+s.bird.groups <- as.data.frame(cbind(Species[1:8], FF.sums[1:8], round(lambda.mean.s, 2), round(birds.adjust.s, 2)))
+
+colnames(s.bird.groups)[1:4] <- c("Species group","Counts from FF","Unadjusted N estimate", "Adjusted N estimate")
+row.names(s.bird.groups) <- NULL
+
+
+
+######
+#For general model
+g.allo_df <- read.csv(here('Data', 'g_allo.csv'))
+
+
+##Prep data for model##
+
+#Set up array for observer records
+g.allo_df$Transect <- str_trunc(g.allo_df$TransectGroup, 12, "right", ellipsis = "")
+ID.obs <- g.allo_df
+
+tran <- unique(ID.obs$Transect)
+dumb <- data.frame(tran = tran, 
+                   numbers = 1:length(tran))
+
+ID.obs$numeric_tran <- 0
+for(i in dumb$tran){
+  ID.obs$numeric_tran[ID.obs$Transect == i] <- match(i, dumb$tran)
+}
+
+#Preserve group sizes since they are changed with the reallocation of unknown species
+grps <- unique(ID.obs$TransectGroup)
+
+grp.sizes <- ID.obs %>% group_by(TransectGroup) %>%
+  summarise(ff.grp.sz = sum(Count.FF))
+
+num.gr <- data.frame(TransectGroup = grps,
+                     grp.sizes = grp.sizes$ff.grp.sz)
+
+ID.obs <- ID.obs %>% left_join(x = ID.obs, y = num.gr, by = "TransectGroup")
+
+ID.obs$SPECIES[str_sub(ID.obs$SPECIES,start = 1, end = 1) == "U"] <- "Z.UNK"
+ID.obs$group[str_sub(ID.obs$group,start = 1, end = 1) == "U"] <- "Z.UNK"
+
+
+ID.BM <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran), names_from = group, values_from = Count.BM,
+              values_fn = sum, values_fill = 0)
+
+
+ID.BM <- as.matrix(ID.BM[,-1])
+
+ID.BM <- ID.BM[,order(colnames(ID.BM))]
+
+ID.TC <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran), names_from = group, values_from = Count.TC,
+              values_fn = sum, values_fill = 0)
+
+
+ID.TC <- as.matrix(ID.TC[,-1])
+
+ID.TC <- ID.TC[,order(colnames(ID.TC))]
+
+OBS <- array(c(ID.BM, ID.TC), dim = c(nrow(ID.BM), ncol(ID.BM), 2))
+
+BM.total <- apply(ID.BM, 1, sum)
+
+TC.total <- apply(ID.TC, 1, sum)
+
+OBS.total <- cbind(BM.total, TC.total)
+
+
+ID.POV <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran), names_from = group, values_from = Count.POV,
+              values_fn = sum, values_fill = 0)
+
+
+ID.POV <- as.matrix(ID.POV[,-1])
+
+ID.POV <- ID.POV[,order(colnames(ID.POV))]
+
+POV <- ID.POV
+
+POV.total <- apply(POV, 1, sum)
+
+ID.FF <- ID.obs %>%
+  pivot_wider(id_cols = c(numeric_tran), names_from = group, values_from = Count.FF,
+              values_fn = sum, values_fill = 0)
+
+
+ID.FF <- as.matrix(ID.FF[,-1])
+
+ID.FF <- ID.FF[,order(colnames(ID.FF))]
+
+FF <- ID.FF
+
+FF.total <- apply(FF, 1, sum)
+
+
+ID.obs <- ID.obs[order(ID.obs$group),]
+nspecies <- length(unique(ID.obs$group)) -1
+nsites <- length(unique(ID.obs$numeric_tran))
+nobs <- 2
+
+
+##Less detailed model##
+#-Nimble Code-#
+
+code <- nimbleCode({
+  
+  #-Priors-#
+  
+  #Composition of latent abundance (corrected for imperfect detection)
+  
+  for(o in 1:nobs){
+    phi[1:(nspecies+1), o] ~ ddirch(phi.ones[1:(nspecies+1),o])
+    
+    for(i in 1:(nspecies+1)){
+      phi.ones[i,o] <- 1
+    }
+    
+  }
+  
+  #Derived product of movement and detection
+  for(o in 1:nobs){
+    E.epsilon[o] ~ dnorm(0, 0.01)
+  }
+  
+  #-Likelihood-#
+  
+  for(j in 1:nsites){
+    
+    #Front facing camera composition
+    FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
+    
+    #Front facing camera total abundance
+    FF.total[j] ~ dpois(lambda.total)
+    
+    for(o in 1:nobs){
+      
+      OBS[j,1:(nspecies+1),o] ~ dmulti(phi[1:(nspecies+1),o], OBS.total[j,o])
+      
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[o])
+      
+    }#end o
+    
+  }#end j
+  
+  for(i in 1:nspecies){
+    
+    pi[i] <- lambda[i]/lambda.total
+    
+  }
+  
+  
+  for(i in 1:nspecies){
+    
+    log(lambda[i]) <- lambda0[i]
+    lambda0[i] ~ dnorm(0, 0.01)
+    
+    for(o in 1:nobs){
+      
+      correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i]
+      
+    }#end o
+  }#end i
+  
+  
+  lambda.total <- sum(lambda[1:nspecies])
+  
+})
+
+#-Compile data-#
+
+data <- list(FF = FF,
+             FF.total = FF.total,
+             #POV = POV,
+             #POV.total = POV.total,
+             OBS = OBS,
+             OBS.total = OBS.total
+)
+
+
+constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
+
+
+#-Initial values-#
+
+inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
+                         # E.epsilon = matrix(ncol = nobs, nrow = 1, 
+                         #                    sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
+                         #                 *runif(1, 0.25, 1))),
+                         E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
+                                             *runif(1, 0.25, 1)), 2),
+                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
+                         #psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
+                                     na.rm = TRUE)
+)}
+
+#-Parameters to save-#
+
+params <- c(
+  "pi",
+  #"psi",
+  "phi",
+  "lambda",
+  "lambda.total",
+  #"epsilon",
+  "E.epsilon",
+  #"misID"
+  "correction"
+)
+
+#-MCMC settings-#
+
+model <- nimbleModel(code = code,
+                     constants = constants,
+                     data = data,
+                     inits = inits())
+
+MCMCconf <- configureMCMC(model, monitors = params)
+
+MCMC <- buildMCMC(MCMCconf)
+
+compiled.model <- compileNimble(model, MCMC)
+
+nc <- 3
+ni <- 20000
+nb <- 10000
+nt <- 1
+
+
+#-Run model-#
+
+g.out <- runMCMC(compiled.model$MCMC,
+                 niter = ni, nburnin = nb,
+                 nchains = nc, thin = nt,
+                 samplesAsCodaMCMC = TRUE)
+
+
+#Diagnostics
+g.out.mcmc <- as.mcmc.list(g.out)
+g.out.ggs <- ggs(g.out.mcmc)
+
+g.out.diag <- ggs_diagnostics(s.out.ggs)
+g.out.gelman <- gelman.diag(g.out.mcmc)
+MCMCtrace(g.out.mcmc, params = c("pi",
+                                 "psi",
+                                 "phi",
+                                 "lambda",
+                                 "lambda.total",
+                                 "epsilon",
+                                 "E.epsilon",
+                                 "misID" ))
+
+#Work with output
+#Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
+dim(g.out[[1]])
+g.mcmc.params <- as.mcmc.list(g.out)
+g.params.groups <- data.frame(as.matrix(g.mcmc.params)) 
+
+g.params.groups = as.matrix(g.params.groups)
+
+g.out.groups <- data.frame(
+  Mean = apply(g.params.groups, 2, mean),
+  lcl = apply(g.params.groups, 2, quantile, probs = c(.05)),
+  ucl = apply(g.params.groups, 2, quantile, probs = c(.95)),
+  SD = apply(g.params.groups, 2, sd))
+
+g.out.g.summ <- MCMCsummary(g.mcmc.params)
 
 FF.g.sums <- apply(FF, 2, sum)
 
 Species <- colnames(FF)
 
-lambdas.g <- out.groups[c(11:18),]
+lambdas.g <- g.out.groups[c(11:18),]
 lambda.mean.g <- nsites*lambdas.g$Mean
 
-epsilons.g <- out.groups[c(3:10),1]
-comp.ratio.g <- out.groups[c(36:51),1] / out.groups[c(60:67),1] #phi/psi
+epsilons.g <- g.out.groups[c(3:10),1]
+comp.ratio.g <- g.out.groups[c(36:51),1] / g.out.groups[c(60:67),1] #phi/psi
 
 birds.adjust.g <- lambda.mean.g*(1/(comp.ratio.g*epsilons.g))
 
-bird.groups <- as.data.frame(cbind(Species[1:8], FF.sums[1:8], round(lambda.mean.g, 2), round(birds.adjust.g, 2)))
+g.bird.groups <- as.data.frame(cbind(Species[1:8], FF.sums[1:8], round(lambda.mean.g, 2), round(birds.adjust.g, 2)))
 
-colnames(bird.groups)[1:4] <- c("Species group","Counts from FF","Unadjusted N estimate", "Adjusted N estimate")
-row.names(bird.groups) <- NULL
-
+colnames(g.bird.groups)[1:4] <- c("Species group","Counts from FF","Unadjusted N estimate", "Adjusted N estimate")
+row.names(g.bird.groups) <- NULL
 
 
 
