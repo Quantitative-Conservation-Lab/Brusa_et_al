@@ -522,7 +522,7 @@ g.out <- runMCMC(compiled.model$MCMC,
 g.out.mcmc <- as.mcmc.list(g.out)
 g.out.ggs <- ggs(g.out.mcmc)
 
-g.out.diag <- ggs_diagnostics(s.out.ggs)
+g.out.diag <- ggs_diagnostics(g.out.ggs)
 g.out.gelman <- gelman.diag(g.out.mcmc)
 MCMCtrace(g.out.mcmc, params = c("pi",
                                  "psi",
