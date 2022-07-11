@@ -525,13 +525,14 @@ g.out.ggs <- ggs(g.out.mcmc)
 g.out.diag <- ggs_diagnostics(g.out.ggs)
 g.out.gelman <- gelman.diag(g.out.mcmc)
 MCMCtrace(g.out.mcmc, params = c("pi",
-                                 "psi",
+                                 #"psi",
                                  "phi",
+                                 "E.epsilon",
                                  "lambda",
                                  "lambda.total",
-                                 "epsilon",
-                                 "E.epsilon",
-                                 "misID" ))
+                                 #"epsilon",
+                                 #"misID"
+                                 ))
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
