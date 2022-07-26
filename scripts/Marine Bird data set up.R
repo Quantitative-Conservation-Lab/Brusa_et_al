@@ -44,7 +44,7 @@ temp_df <- sb_df %>%
                    str_detect(sb_df$SPECIES, "SC$") ~ "scoter"
   ))
 
-colnames(temp_df)[30] <- "sp.group"
+colnames(temp_df)[34] <- "sp.group"
 
 temp_df <- temp_df %>% filter(!str_sub(temp_df$SPECIES,start = 1, end = 1) == "U" | SPECIES == "UNGU" | SPECIES == "UBWG")
 
@@ -61,7 +61,7 @@ spp.sums$Proportions <- spp.sums$Cam.Count.sp/spp.sums$Cam.Count.grp
 
 s.allo_df <- sb_df
 s.allo_df <- s.allo_df %>% left_join(x = s.allo_df, y = spp.sums, by = "SPECIES")
-s.allo_df <- s.allo_df[,-c(30:32)]
+s.allo_df <- s.allo_df[,-c(34:36)]
 
 s.allo_df <- s.allo_df %>% rename(Cam.Count.FF = Count.FF)
 s.allo_df <- s.allo_df %>% rename(Cam.Count.POV = Count.POV)
@@ -123,8 +123,12 @@ for(g in unique(s.allo_df$TransectGroup)){
 s.allo_df <- s.allo_df %>% rename(Count.FF = Cam.Count.FF)
 s.allo_df <- s.allo_df %>% rename(Count.POV = Cam.Count.POV)
 
+s.allo_df$SPECIES[s.allo_df$SPECIES == "UNGU"] <- "GULL"
+
 s.allo_df$Count.FF[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
 s.allo_df$Count.POV[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
+
+s.allo_df$SPECIES[s.allo_df$SPECIES == "GULL"] <- "UNGU"
 
 #Rename into specific species/species groups
 s.allo_df <- s.allo_df %>%
@@ -174,8 +178,8 @@ s.allo_df <- s.allo_df %>%
                    str_detect(s.allo_df$SPECIES, "UNSC") ~ "UNSC"
                    ))
 
-s.allo_df <- s.allo_df[,-30]
-colnames(s.allo_df)[30] <- "sp.group"
+s.allo_df <- s.allo_df[,-34]
+colnames(s.allo_df)[34] <- "sp.group"
 
 #To work in model, round counts to whole numbers
 s.allo_df$Count.FF <- round(s.allo_df$Count.FF, 0)
@@ -206,7 +210,7 @@ g.allo_df <- sb_df %>%
                    str_detect(sb_df$SPECIES, "SC$") ~ "scoter"
                    ))
 
-colnames(g.allo_df)[30] <- "group"
+colnames(g.allo_df)[34] <- "group"
 
 temp_df <- g.allo_df
 
@@ -224,7 +228,7 @@ temp_df <- temp_df %>%
                      str_detect(temp_df$group, "goose") ~ "nonduck"
   ))
 
-colnames(temp_df)[31] <- "duckgroup"
+colnames(temp_df)[35] <- "duckgroup"
 
 temp_df <- temp_df %>% filter(!str_sub(temp_df$group,start = 1, end = 1) == "U")
 
@@ -239,7 +243,7 @@ temp_df <- temp_df %>%
                      str_detect(temp_df$group, "goose") ~ "birds"
   ))
 
-colnames(temp_df)[32] <- "birds"
+colnames(temp_df)[36] <- "birds"
 
 #Get group totals and species proportions
 group.sums <- temp_df %>% group_by(group) %>% summarise(Cam.Count.grp = sum(Count.FF), duckgroup = duckgroup, 
@@ -261,7 +265,7 @@ group.sums$duckProportions <- group.sums$Cam.Count.grp/group.sums$Cam.Count.d
 group.sums$birdProportions <- group.sums$Cam.Count.grp/group.sums$Cam.Count.b
 
 g.allo_df <- g.allo_df %>% left_join(x = g.allo_df, y = group.sums, by = "group")
-g.allo_df <- g.allo_df[,-c(31:35)]
+g.allo_df <- g.allo_df[,-c(35:39)]
 
 g.allo_df <- g.allo_df %>% rename(Cam.Count.FF = Count.FF)
 g.allo_df <- g.allo_df %>% rename(Cam.Count.POV = Count.POV)
@@ -318,8 +322,14 @@ for(g in unique(g.allo_df$TransectGroup)){
 g.allo_df <- g.allo_df %>% rename(Count.FF = Cam.Count.FF)
 g.allo_df <- g.allo_df %>% rename(Count.POV = Cam.Count.POV)
 
+g.allo_df$SPECIES[g.allo_df$SPECIES == "UNGU"] <- "GULL"
+
 g.allo_df$Count.FF[str_sub(g.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
 g.allo_df$Count.POV[str_sub(g.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
+
+g.allo_df$SPECIES[g.allo_df$SPECIES == "GULL"] <- "UNGU"
+
+g.allo_df <- g.allo_df[,-c(35, 36)]
 
 #To work in model, round counts to whole numbers
 g.allo_df$Count.FF <- round(g.allo_df$Count.FF, 0)

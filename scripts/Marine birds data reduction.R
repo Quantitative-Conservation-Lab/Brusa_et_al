@@ -11,6 +11,10 @@ s.allo_df <- read.csv(here('Data', 's_allo.csv'))
 
 ##Prep data for model##
 
+#The specific model data set up and model are currently set up to run one model with only observer records from the
+#observer sitting in the middle (also called front) seat and one model with only observer records from the observer
+#sitting in the rear seat. The general model is set up for seat assignment as a covariate, but it is not functional as is
+
 #Set up array for observer records
 s.allo_df$Transect <- str_trunc(s.allo_df$TransectGroup, 12, "right", ellipsis = "")
 ID.obs <- s.allo_df
@@ -37,6 +41,10 @@ ID.obs <- ID.obs %>% left_join(x = ID.obs, y = num.gr, by = "TransectGroup")
 
 ID.obs$SPECIES[str_sub(ID.obs$SPECIES,start = 1, end = 1) == "U"] <- "Z.UNK"
 ID.obs$sp.group[str_sub(ID.obs$sp.group,start = 1, end = 1) == "U"] <- "Z.UNK"
+
+#Comment/uncomment below to set up model for middle seat observations only or rear seat observations only
+#ID.obs <- ID.obs %>% filter(Fr.Det == 1)
+ID.obs <- ID.obs %>% filter(Rr.Det == 1)
 
 
 ID.BM <- ID.obs %>%
@@ -92,6 +100,16 @@ ID.FF <- ID.FF[,order(colnames(ID.FF))]
 FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
+
+# #Set up seat position covariate
+# ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 1, 0)
+# Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
+# Obs1.Front <- Obs1.Front$Obs1.Front
+# 
+# ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 1, 0)
+# Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
+# Obs2.Front <- Obs2.Front$Obs2.Front
+
 
 ID.obs <- ID.obs[order(ID.obs$sp.group),]
 nspecies <- length(unique(ID.obs$sp.group)) -1
@@ -153,10 +171,12 @@ code <- nimbleCode({
     
     log(lambda[i]) <- lambda0[i]
     lambda0[i] ~ dnorm(0, 0.01)
+    
 
     for(o in 1:nobs){
+     
       
-    correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i]
+    correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i] 
     
     }#end o
   }#end i
@@ -170,8 +190,8 @@ code <- nimbleCode({
 
 data <- list(FF = FF,
              FF.total = FF.total,
-             #POV = POV,
-             #POV.total = POV.total,
+             # Obs1.Front = Obs1.Front,
+             # Obs2.Front = Obs2.Front,
              OBS = OBS,
              OBS.total = OBS.total
 )
@@ -183,14 +203,11 @@ constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 #-Initial values-#
 
 inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
-                         # E.epsilon = matrix(ncol = nobs, nrow = 1, 
-                         #                    sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                         #                 *runif(1, 0.25, 1))),
                          E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
                                          *runif(1, 0.25, 1)), 2),
-                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         #psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         # int.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))), 2),
+                         # beta.Obs1.Front <- rnorm(1, 0, 0.1),
+                         # beta.Obs2.Front <- rnorm(1, 0, 0.1),
                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
                                      na.rm = TRUE)
 )}
@@ -199,13 +216,12 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE)
 
 params <- c(
   "pi",
-  #"psi",
   "phi",
+  # "beta.Obs1.Front",
+  # "beta.Obs2.Front",
   "lambda",
   "lambda.total",
-  #"epsilon",
   "E.epsilon",
-  #"misID"
   "correction"
 )
 
@@ -243,16 +259,21 @@ s.out.ggs <- ggs(s.out.mcmc)
 s.out.diag <- ggs_diagnostics(s.out.ggs)
 s.out.gelman <- gelman.diag(s.out.mcmc)
 MCMCtrace(s.out.mcmc, params = c("pi",
-                               "psi",
                                "phi",
+                               # "beta.Obs1.Front",
+                               # "beta.Obs2.Front",
                                "lambda",
                                "lambda.total",
-                               "epsilon",
                                "E.epsilon",
-                               "misID" ))
+                               "correction"
+                               ))
 
 #Work with output
-#Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
+#Check dimensions - 20K iterations minus 10K for burn-in, 194 parameters
+setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
+s.out <- readRDS("specificfront_model.RDS") 
+#OR
+s.out <- readRDS("specificrear_model.RDS")
 dim(s.out[[1]])
 s.mcmc.params <- as.mcmc.list(s.out)
 s.params.groups <- data.frame(as.matrix(s.mcmc.params)) 
@@ -261,8 +282,8 @@ s.params.groups = as.matrix(s.params.groups)
 
 s.out.groups <- data.frame(
   Mean = apply(s.params.groups, 2, mean),
-  lcl = apply(s.params.groups, 2, quantile, probs = c(.05)),
-  ucl = apply(s.params.groups, 2, quantile, probs = c(.95)),
+  lcl = apply(s.params.groups, 2, quantile, probs = c(.05), na.rm = TRUE),
+  ucl = apply(s.params.groups, 2, quantile, probs = c(.95), na.rm = TRUE),
   SD = apply(s.params.groups, 2, sd))
 
 s.out.g.summ <- MCMCsummary(s.mcmc.params)
@@ -288,6 +309,9 @@ row.names(s.bird.groups) <- NULL
 
 ######
 #For general model
+
+#This code is currently set up to try to incorporate seat assignment as a covariate...but needs work
+
 g.allo_df <- read.csv(here('Data', 'g_allo.csv'))
 
 
@@ -374,6 +398,15 @@ FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
+#Set up seat position covariate
+ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 1, 0)
+Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
+Obs1.Front <- Obs1.Front$Obs1.Front
+
+ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 1, 0)
+Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
+Obs2.Front <- Obs2.Front$Obs2.Front
+
 
 ID.obs <- ID.obs[order(ID.obs$group),]
 nspecies <- length(unique(ID.obs$group)) -1
@@ -401,8 +434,11 @@ code <- nimbleCode({
   
   #Derived product of movement and detection
   for(o in 1:nobs){
-    E.epsilon[o] ~ dnorm(0, 0.01)
+    int.epsilon[o] ~ dnorm(0, 0.01)
   }
+  
+  beta.Obs1.Front ~ dnorm(0, 0.1)
+  beta.Obs2.Front ~ dnorm(0, 0.1)
   
   #-Likelihood-#
   
@@ -418,7 +454,7 @@ code <- nimbleCode({
       
       OBS[j,1:(nspecies+1),o] ~ dmulti(phi[1:(nspecies+1),o], OBS.total[j,o])
       
-      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[o])
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[j,o])
       
     }#end o
     
@@ -428,17 +464,19 @@ code <- nimbleCode({
     
     pi[i] <- lambda[i]/lambda.total
     
-  }
   
-  
-  for(i in 1:nspecies){
     
     log(lambda[i]) <- lambda0[i]
     lambda0[i] ~ dnorm(0, 0.01)
     
     for(o in 1:nobs){
+      for(j in 1:nsites){
       
-      correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i]
+      log(E.epsilon[j,o]) <- int.epsilon[o] + beta.Obs1.Front*Obs1.Front[j] + beta.Obs2.Front*Obs2.Front[j]
+      
+      correction[j,i,o] <- E.epsilon[j,o] * phi[i,o]/pi[i]
+      
+    }
       
     }#end o
   }#end i
@@ -452,8 +490,8 @@ code <- nimbleCode({
 
 data <- list(FF = FF,
              FF.total = FF.total,
-             #POV = POV,
-             #POV.total = POV.total,
+             Obs1.Front = Obs1.Front,
+             Obs2.Front = Obs2.Front,
              OBS = OBS,
              OBS.total = OBS.total
 )
@@ -465,14 +503,11 @@ constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 #-Initial values-#
 
 inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
-                         # E.epsilon = matrix(ncol = nobs, nrow = 1, 
-                         #                    sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                         #                 *runif(1, 0.25, 1))),
-                         E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                                             *runif(1, 0.25, 1)), 2),
-                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         #epsilon = rnorm(nspecies, runif(1, 0.5, 1), 0.1) * runif(1,1,1.5) * runif(1, 0.25, 1),
-                         #psi = apply(POV/apply(POV, 1, sum), 2, mean, na.rm = TRUE),
+                         # E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
+                         #                     *runif(1, 0.25, 1)), 2),
+                         int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
+                         beta.Obs1.Front <- rnorm(1, 0, 0.1),
+                         beta.Obs2.Front <- rnorm(1, 0, 0.1),
                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
                                      na.rm = TRUE)
 )}
@@ -481,13 +516,12 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE)
 
 params <- c(
   "pi",
-  #"psi",
   "phi",
   "lambda",
   "lambda.total",
-  #"epsilon",
   "E.epsilon",
-  #"misID"
+  "beta.Obs1.Front",
+  "beta.Obs2.Front",
   "correction"
 )
 
@@ -525,17 +559,20 @@ g.out.ggs <- ggs(g.out.mcmc)
 g.out.diag <- ggs_diagnostics(g.out.ggs)
 g.out.gelman <- gelman.diag(g.out.mcmc)
 MCMCtrace(g.out.mcmc, params = c("pi",
-                                 #"psi",
                                  "phi",
                                  "E.epsilon",
                                  "lambda",
                                  "lambda.total",
-                                 #"epsilon",
-                                 #"misID"
+                                 "beta.Obs1.Front",
+                                 "beta.Obs2.Front",
+                                 "correction"
                                  ))
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
+#Bring in model output
+setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
+g.out <- readRDS("general_model.RDS")
 dim(g.out[[1]])
 g.mcmc.params <- as.mcmc.list(g.out)
 g.params.groups <- data.frame(as.matrix(g.mcmc.params)) 
@@ -544,16 +581,16 @@ g.params.groups = as.matrix(g.params.groups)
 
 g.out.groups <- data.frame(
   Mean = apply(g.params.groups, 2, mean),
-  lcl = apply(g.params.groups, 2, quantile, probs = c(.05)),
-  ucl = apply(g.params.groups, 2, quantile, probs = c(.95)),
+  lcl = apply(g.params.groups, 2, quantile, probs = c(.05), na.rm = TRUE),
+  ucl = apply(g.params.groups, 2, quantile, probs = c(.95), na.rm = TRUE),
   SD = apply(g.params.groups, 2, sd))
-
-g.out.g.summ <- MCMCsummary(g.mcmc.params)
 
 FF.g.sums <- apply(FF, 2, sum)
 
 Species <- colnames(FF)
 
+
+#Note, the following code is outdated and will be updated once we decide on a final model/model set
 lambdas.g <- g.out.groups[c(11:18),]
 lambda.mean.g <- nsites*lambdas.g$Mean
 
