@@ -399,14 +399,16 @@ FF <- ID.FF
 FF.total <- apply(FF, 1, sum)
 
 #Set up seat position covariate
-ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 1, 0)
+ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 0, 1)
 Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
 Obs1.Front <- Obs1.Front$Obs1.Front
 
-ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 1, 0)
+ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 0, 1)
 Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
 Obs2.Front <- Obs2.Front$Obs2.Front
 
+#Covariate for seat position (0 = front, 1 = rear)
+seat <- cbind(Obs1.Front, Obs2.Front)
 
 ID.obs <- ID.obs[order(ID.obs$group),]
 nspecies <- length(unique(ID.obs$group)) -1
@@ -437,8 +439,8 @@ code <- nimbleCode({
     int.epsilon[o] ~ dnorm(0, 0.01)
   }
   
-  beta.Obs1.Front ~ dnorm(0, 0.1)
-  beta.Obs2.Front ~ dnorm(0, 0.1)
+  #Effect of rear seat
+  beta ~ dnorm(0, 0.01)
   
   #-Likelihood-#
   
@@ -456,6 +458,8 @@ code <- nimbleCode({
       
       OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[j,o])
       
+      log(E.epsilon[j,o]) <- int.epsilon[o] + beta * seat[j,o]
+      
     }#end o
     
   }#end j
@@ -470,13 +474,8 @@ code <- nimbleCode({
     lambda0[i] ~ dnorm(0, 0.01)
     
     for(o in 1:nobs){
-      for(j in 1:nsites){
       
-      log(E.epsilon[j,o]) <- int.epsilon[o] + beta.Obs1.Front*Obs1.Front[j] + beta.Obs2.Front*Obs2.Front[j]
-      
-      correction[j,i,o] <- E.epsilon[j,o] * phi[i,o]/pi[i]
-      
-    }
+      correction[i,o] <- exp(int.epsilon[o]) * phi[i,o]/pi[i]
       
     }#end o
   }#end i
@@ -488,12 +487,11 @@ code <- nimbleCode({
 
 #-Compile data-#
 
-data <- list(FF = FF,
+data <- list(FF = FF[,1:nspecies],
              FF.total = FF.total,
-             Obs1.Front = Obs1.Front,
-             Obs2.Front = Obs2.Front,
              OBS = OBS,
-             OBS.total = OBS.total
+             OBS.total = OBS.total,
+             seat = seat
 )
 
 
@@ -502,12 +500,9 @@ constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 #-Initial values-#
 
-inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
-                         # E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                         #                     *runif(1, 0.25, 1)), 2),
+inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = TRUE),
                          int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
-                         beta.Obs1.Front <- rnorm(1, 0, 0.1),
-                         beta.Obs2.Front <- rnorm(1, 0, 0.1),
+                         beta = runif(1, -1, 1),
                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
                                      na.rm = TRUE)
 )}
@@ -517,11 +512,13 @@ inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE)
 params <- c(
   "pi",
   "phi",
+  "beta",
+  "int.epsilon"
+)
+
+params2 <- c(
   "lambda",
   "lambda.total",
-  "E.epsilon",
-  "beta.Obs1.Front",
-  "beta.Obs2.Front",
   "correction"
 )
 
@@ -532,7 +529,7 @@ model <- nimbleModel(code = code,
                      data = data,
                      inits = inits())
 
-MCMCconf <- configureMCMC(model, monitors = params)
+MCMCconf <- configureMCMC(model, monitors = params, monitors2 = params2)
 
 MCMC <- buildMCMC(MCMCconf)
 
@@ -542,13 +539,14 @@ nc <- 3
 ni <- 20000
 nb <- 10000
 nt <- 1
+nt2 <- 10
 
 
 #-Run model-#
 
 g.out <- runMCMC(compiled.model$MCMC,
                  niter = ni, nburnin = nb,
-                 nchains = nc, thin = nt,
+                 nchains = nc, thin = nt, thin2 = nt2,
                  samplesAsCodaMCMC = TRUE)
 
 
