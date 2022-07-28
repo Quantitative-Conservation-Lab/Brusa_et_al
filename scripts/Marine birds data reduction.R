@@ -1,3 +1,9 @@
+#The specific model data set up and model are currently set up to run one model with only observer records from the
+#observer sitting in the middle (also called front) seat and one model with only observer records from the observer
+#sitting in the rear seat. The general model is set up for seat assignment as a covariate, but it is not functional as is
+
+##Libraries##
+
 library(tidyverse)
 library(nimble)
 library(ggmcmc)
@@ -6,14 +12,11 @@ library(MCMCvis)
 library(viridis)
 library(here)
 
+##Load species-specific data##
+
 s.allo_df <- read.csv(here('Data', 's_allo.csv'))
 
-
 ##Prep data for model##
-
-#The specific model data set up and model are currently set up to run one model with only observer records from the
-#observer sitting in the middle (also called front) seat and one model with only observer records from the observer
-#sitting in the rear seat. The general model is set up for seat assignment as a covariate, but it is not functional as is
 
 #Set up array for observer records
 s.allo_df$Transect <- str_trunc(s.allo_df$TransectGroup, 12, "right", ellipsis = "")
@@ -42,11 +45,6 @@ ID.obs <- ID.obs %>% left_join(x = ID.obs, y = num.gr, by = "TransectGroup")
 ID.obs$SPECIES[str_sub(ID.obs$SPECIES,start = 1, end = 1) == "U"] <- "Z.UNK"
 ID.obs$sp.group[str_sub(ID.obs$sp.group,start = 1, end = 1) == "U"] <- "Z.UNK"
 
-#Comment/uncomment below to set up model for middle seat observations only or rear seat observations only
-#ID.obs <- ID.obs %>% filter(Fr.Det == 1)
-ID.obs <- ID.obs %>% filter(Rr.Det == 1)
-
-
 ID.BM <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran), names_from = sp.group, values_from = Count.BM,
               values_fn = sum, values_fill = 0)
@@ -55,7 +53,6 @@ ID.BM <- ID.obs %>%
 ID.BM <- as.matrix(ID.BM[,-1])
 
 ID.BM <- ID.BM[,order(colnames(ID.BM))]
-
 
 ID.TC <- ID.obs %>%
   pivot_wider(id_cols = c(numeric_tran), names_from = sp.group, values_from = Count.TC,
@@ -101,138 +98,146 @@ FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
-# #Set up seat position covariate
-# ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 1, 0)
-# Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
-# Obs1.Front <- Obs1.Front$Obs1.Front
-# 
-# ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 1, 0)
-# Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
-# Obs2.Front <- Obs2.Front$Obs2.Front
+##Covariates##
 
+#Seat covariate
+ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 0, 1)
+Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
+Obs1.Front <- Obs1.Front$Obs1.Front
+
+ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 0, 1)
+Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
+Obs2.Front <- Obs2.Front$Obs2.Front
+
+seat <- cbind(Obs1.Front, Obs2.Front)
 
 ID.obs <- ID.obs[order(ID.obs$sp.group),]
 nspecies <- length(unique(ID.obs$sp.group)) -1
 nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
 
-
-##Less detailed model##
-#-Nimble Code-#
+##Nimble code##
 
 code <- nimbleCode({
   
   #-Priors-#
-  
-  #Composition of latent abundance (corrected for imperfect detection)
 
   for(o in 1:nobs){
+    
+    #Observer-specific composition
     phi[1:(nspecies+1), o] ~ ddirch(phi.ones[1:(nspecies+1),o])
     
     for(i in 1:(nspecies+1)){
+      
       phi.ones[i,o] <- 1
-    }
-
-  }
+      
+    }#end i
+    
+    #Intercept on observation error
+    int.epsilon[o] ~ dnorm(0, 0.01)
+    
+  }#end o
   
-  #Derived product of movement and detection
-  for(o in 1:nobs){
-    E.epsilon[o] ~ dnorm(0, 0.01)
-  }
+  for(i in 1:nspecies){
+    
+    #Intercept for expected species-specific abundances
+    lambda0[i] ~ dnorm(0, 0.01)
+    
+  }#end i
+
+  #Effect of rear seat
+  beta ~ dnorm(0, 0.01)
   
   #-Likelihood-#
   
   for(j in 1:nsites){
     
-    #Front facing camera composition
+    #Front facing camera (true) composition
     FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
     
-    #Front facing camera total abundance
+    #Front facing camera (true) community-abundance
     FF.total[j] ~ dpois(lambda.total)
     
     for(o in 1:nobs){
       
+      #Observer composition
       OBS[j,1:(nspecies+1),o] ~ dmulti(phi[1:(nspecies+1),o], OBS.total[j,o])
       
-      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[o])
+      #Observer community-abundance
+      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[j,o])
+      
+      #Linear predictor of observation error
+      log(E.epsilon[j,o]) <- int.epsilon[o] + beta * seat[j,o]
       
     }#end o
-    
   }#end j
   
   for(i in 1:nspecies){
     
+    #Composition as proportion of species-specific abundance to community-abundance
     pi[i] <- lambda[i]/lambda.total
     
-   }
-
-     
-  for(i in 1:nspecies){
-    
+    #Linear predictor of species-specific abundance
     log(lambda[i]) <- lambda0[i]
-    lambda0[i] ~ dnorm(0, 0.01)
     
-
     for(o in 1:nobs){
-     
       
-    correction[i,o] <- E.epsilon[o] * phi[i,o]/pi[i] 
-    
+      #Correction factor for species- and observer-specific observations
+      correction[i,o] <- exp(int.epsilon[o]) * phi[i,o]/pi[i]
+      
     }#end o
   }#end i
   
-  
+  #Constrain expected community-abundance to be sum of expected species-specific abundances
   lambda.total <- sum(lambda[1:nspecies])
   
 })
 
-#-Compile data-#
+##Compile data##
 
-data <- list(FF = FF,
+data <- list(FF = FF[,1:nspecies],
              FF.total = FF.total,
-             # Obs1.Front = Obs1.Front,
-             # Obs2.Front = Obs2.Front,
              OBS = OBS,
-             OBS.total = OBS.total
+             OBS.total = OBS.total,
+             seat = seat
 )
 
 
 constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
+##Initial values##
 
-#-Initial values-#
-
-inits <- function(){list(pi = apply(FF/apply(FF, 1, sum), 2, mean, na.rm = TRUE),
-                         E.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))
-                                         *runif(1, 0.25, 1)), 2),
-                         # int.epsilon = rep(sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))), 2),
-                         # beta.Obs1.Front <- rnorm(1, 0, 0.1),
-                         # beta.Obs2.Front <- rnorm(1, 0, 0.1),
+inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = TRUE),
+                         int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
+                         beta = runif(1, -1, 1),
                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
                                      na.rm = TRUE)
 )}
 
-#-Parameters to save-#
+##Parameters to save##
 
 params <- c(
   "pi",
   "phi",
-  # "beta.Obs1.Front",
-  # "beta.Obs2.Front",
+  "beta",
+  "int.epsilon",
+  "lambda0"
+)
+
+params2 <- c(
   "lambda",
   "lambda.total",
-  "E.epsilon",
   "correction"
 )
 
-#-MCMC settings-#
+##MCMC settings##
 
 model <- nimbleModel(code = code,
                      constants = constants,
                      data = data,
                      inits = inits())
 
-MCMCconf <- configureMCMC(model, monitors = params)
+MCMCconf <- configureMCMC(model, monitors = params, monitors2 = params2)
 
 MCMC <- buildMCMC(MCMCconf)
 
@@ -242,26 +247,25 @@ nc <- 3
 ni <- 20000
 nb <- 10000
 nt <- 1
+nt2 <- 10
 
-
-#-Run model-#
+##Run model##
 
 s.out <- runMCMC(compiled.model$MCMC,
                niter = ni, nburnin = nb,
-               nchains = nc, thin = nt,
+               nchains = nc, thin = nt, thin2 = nt2,
                samplesAsCodaMCMC = TRUE)
 
 
-#Diagnostics
-s.out.mcmc <- as.mcmc.list(s.out)
+##Diagnostics##
+
+s.out.mcmc <- as.mcmc.list(s.out$samples) #s.out$samples2 
 s.out.ggs <- ggs(s.out.mcmc)
 
 s.out.diag <- ggs_diagnostics(s.out.ggs)
 s.out.gelman <- gelman.diag(s.out.mcmc)
 MCMCtrace(s.out.mcmc, params = c("pi",
                                "phi",
-                               # "beta.Obs1.Front",
-                               # "beta.Obs2.Front",
                                "lambda",
                                "lambda.total",
                                "E.epsilon",
@@ -305,12 +309,8 @@ s.bird.groups <- as.data.frame(cbind(Species[1:8], FF.sums[1:8], round(lambda.me
 colnames(s.bird.groups)[1:4] <- c("Species group","Counts from FF","Unadjusted N estimate", "Adjusted N estimate")
 row.names(s.bird.groups) <- NULL
 
-
-
 ######
 #For general model
-
-#This code is currently set up to try to incorporate seat assignment as a covariate...but needs work
 
 g.allo_df <- read.csv(here('Data', 'g_allo.csv'))
 
@@ -416,76 +416,8 @@ nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
 
 
-##Less detailed model##
-#-Nimble Code-#
 
-code <- nimbleCode({
-  
-  #-Priors-#
-  
-  #Composition of latent abundance (corrected for imperfect detection)
-  
-  for(o in 1:nobs){
-    phi[1:(nspecies+1), o] ~ ddirch(phi.ones[1:(nspecies+1),o])
-    
-    for(i in 1:(nspecies+1)){
-      phi.ones[i,o] <- 1
-    }
-    
-  }
-  
-  #Derived product of movement and detection
-  for(o in 1:nobs){
-    int.epsilon[o] ~ dnorm(0, 0.01)
-  }
-  
-  #Effect of rear seat
-  beta ~ dnorm(0, 0.01)
-  
-  #-Likelihood-#
-  
-  for(j in 1:nsites){
-    
-    #Front facing camera composition
-    FF[j,1:nspecies] ~ dmulti(pi[1:nspecies], FF.total[j])
-    
-    #Front facing camera total abundance
-    FF.total[j] ~ dpois(lambda.total)
-    
-    for(o in 1:nobs){
-      
-      OBS[j,1:(nspecies+1),o] ~ dmulti(phi[1:(nspecies+1),o], OBS.total[j,o])
-      
-      OBS.total[j,o] ~ dpois(lambda.total * E.epsilon[j,o])
-      
-      log(E.epsilon[j,o]) <- int.epsilon[o] + beta * seat[j,o]
-      
-    }#end o
-    
-  }#end j
-  
-  for(i in 1:nspecies){
-    
-    pi[i] <- lambda[i]/lambda.total
-    
-  
-    
-    log(lambda[i]) <- lambda0[i]
-    lambda0[i] ~ dnorm(0, 0.01)
-    
-    for(o in 1:nobs){
-      
-      correction[i,o] <- exp(int.epsilon[o]) * phi[i,o]/pi[i]
-      
-    }#end o
-  }#end i
-  
-  
-  lambda.total <- sum(lambda[1:nspecies])
-  
-})
-
-#-Compile data-#
+##Compile data##
 
 data <- list(FF = FF[,1:nspecies],
              FF.total = FF.total,
@@ -498,7 +430,7 @@ data <- list(FF = FF[,1:nspecies],
 constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
 
 
-#-Initial values-#
+##Initial values##
 
 inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = TRUE),
                          int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
@@ -507,22 +439,8 @@ inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = T
                                      na.rm = TRUE)
 )}
 
-#-Parameters to save-#
 
-params <- c(
-  "pi",
-  "phi",
-  "beta",
-  "int.epsilon"
-)
-
-params2 <- c(
-  "lambda",
-  "lambda.total",
-  "correction"
-)
-
-#-MCMC settings-#
+##MCMC settings##
 
 model <- nimbleModel(code = code,
                      constants = constants,
@@ -535,14 +453,7 @@ MCMC <- buildMCMC(MCMCconf)
 
 compiled.model <- compileNimble(model, MCMC)
 
-nc <- 3
-ni <- 20000
-nb <- 10000
-nt <- 1
-nt2 <- 10
-
-
-#-Run model-#
+##Run model##
 
 g.out <- runMCMC(compiled.model$MCMC,
                  niter = ni, nburnin = nb,
@@ -550,8 +461,8 @@ g.out <- runMCMC(compiled.model$MCMC,
                  samplesAsCodaMCMC = TRUE)
 
 
-#Diagnostics
-g.out.mcmc <- as.mcmc.list(g.out)
+##Diagnostics##
+g.out.mcmc <- as.mcmc.list(g.out$samples)
 g.out.ggs <- ggs(g.out.mcmc)
 
 g.out.diag <- ggs_diagnostics(g.out.ggs)
