@@ -106,12 +106,14 @@ for(g in unique(s.allo_df$TransectGroup)){
   for(u in names(grouplist)){
     go <- u %in% s.allo_df$SPECIES[s.allo_df$TransectGroup == g]
     if(!go){next}
+    camcols <- which(str_detect(colnames(s.allo_df),"Cam"))
+    if(!any(s.allo_df[s.allo_df$TransectGroup == g & s.allo_df$SPECIES == u,camcols] > 0)){next}
     nspp <- length(grouplist[[u]]$code)
+    #Need something to make a condition that only adds new lines if Cam.Count.FF > 0 for the UN spp assigned to u
     newline <- s.allo_df[s.allo_df$SPECIES == u & s.allo_df$TransectGroup == g,]
     newlines <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))
     specol <- which(colnames(s.allo_df) == "SPECIES")
     newlines[,specol] <- grouplist[[u]]$code
-    camcols <- which(str_detect(colnames(s.allo_df),"Cam"))
     newlines[,camcols] <- apply(newlines[,camcols], 2,FUN = function(x){
       as.numeric(x)*grouplist[[u]]$prop
     })
@@ -124,6 +126,7 @@ s.allo_df <- s.allo_df %>% rename(Count.FF = Cam.Count.FF)
 s.allo_df <- s.allo_df %>% rename(Count.POV = Cam.Count.POV)
 
 s.allo_df$SPECIES[s.allo_df$SPECIES == "UNGU"] <- "GULL"
+
 
 s.allo_df$Count.FF[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
 s.allo_df$Count.POV[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
@@ -301,6 +304,8 @@ for(g in unique(g.allo_df$TransectGroup)){
   for(u in names(grouplist)){
     go <- u %in% g.allo_df$group[g.allo_df$TransectGroup == g]
     if(!go){next}
+    camcols <- which(str_detect(colnames(g.allo_df),"Cam"))
+    if(!any(g.allo_df[g.allo_df$TransectGroup == g & g.allo_df$SPECIES == u,camcols] > 0)){next}
     nspp <- length(grouplist[[u]]$grp)
     newline <- g.allo_df[g.allo_df$group == u & g.allo_df$TransectGroup == g,]
     newlines1 <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))

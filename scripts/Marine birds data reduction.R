@@ -1,7 +1,3 @@
-#The specific model data set up and model are currently set up to run one model with only observer records from the
-#observer sitting in the middle (also called front) seat and one model with only observer records from the observer
-#sitting in the rear seat. The general model is set up for seat assignment as a covariate, but it is not functional as is
-
 ##Libraries##
 
 library(tidyverse)
@@ -98,6 +94,9 @@ FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
+
+ID.obs <- ID.obs[order(ID.obs$sp.group),]
+
 ##Covariates##
 
 #Seat covariate
@@ -111,7 +110,7 @@ Obs2.Front <- Obs2.Front$Obs2.Front
 
 seat <- cbind(Obs1.Front, Obs2.Front)
 
-ID.obs <- ID.obs[order(ID.obs$sp.group),]
+
 nspecies <- length(unique(ID.obs$sp.group)) -1
 nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
@@ -259,27 +258,29 @@ s.out <- runMCMC(compiled.model$MCMC,
 
 ##Diagnostics##
 
-s.out.mcmc <- as.mcmc.list(s.out$samples) #s.out$samples2 
-s.out.ggs <- ggs(s.out.mcmc)
+s.out.mcmc1 <- as.mcmc.list(s.out$samples) #s.out$samples2 
+s.out.mcmc2 <- as.mcmc.list(s.out$samples2)
+s.out.ggs <- ggs(s.out.mcmc2)
 
 s.out.diag <- ggs_diagnostics(s.out.ggs)
 s.out.gelman <- gelman.diag(s.out.mcmc)
-MCMCtrace(s.out.mcmc, params = c("pi",
+MCMCtrace(s.out.mcmc1, params = c("pi",
                                "phi",
-                               "lambda",
-                               "lambda.total",
-                               "E.epsilon",
-                               "correction"
+                               "int.epsilon",
+                               "beta"
                                ))
+
+MCMCtrace(s.out.mcmc2, params = c("lambda",
+                                  "lambda.total",
+                                  "correction"
+))
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 194 parameters
 setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
-s.out <- readRDS("specificfront_model.RDS") 
-#OR
-s.out <- readRDS("specificrear_model.RDS")
+s.out <- readRDS("specific_model.RDS") 
 dim(s.out[[1]])
-s.mcmc.params <- as.mcmc.list(s.out)
+s.mcmc.params <- as.mcmc.list(s.out[[1]])
 s.params.groups <- data.frame(as.matrix(s.mcmc.params)) 
 
 s.params.groups = as.matrix(s.params.groups)
@@ -398,7 +399,11 @@ FF <- ID.FF
 
 FF.total <- apply(FF, 1, sum)
 
-#Set up seat position covariate
+ID.obs <- ID.obs[order(ID.obs$group),]
+
+##Covariates##
+
+#Seat covariate
 ID.obs$Obs1.Front <- ifelse(ID.obs$Front == "BM", 0, 1)
 Obs1.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs1.Front = round(mean(Obs1.Front)))
 Obs1.Front <- Obs1.Front$Obs1.Front
@@ -407,13 +412,15 @@ ID.obs$Obs2.Front <- ifelse(ID.obs$Front == "TC", 0, 1)
 Obs2.Front <- ID.obs %>% group_by(Transect) %>% summarise(Obs2.Front = round(mean(Obs2.Front)))
 Obs2.Front <- Obs2.Front$Obs2.Front
 
-#Covariate for seat position (0 = front, 1 = rear)
 seat <- cbind(Obs1.Front, Obs2.Front)
 
-ID.obs <- ID.obs[order(ID.obs$group),]
+
 nspecies <- length(unique(ID.obs$group)) -1
 nsites <- length(unique(ID.obs$numeric_tran))
 nobs <- 2
+
+
+#Run model code above#
 
 
 
@@ -462,20 +469,22 @@ g.out <- runMCMC(compiled.model$MCMC,
 
 
 ##Diagnostics##
-g.out.mcmc <- as.mcmc.list(g.out$samples)
-g.out.ggs <- ggs(g.out.mcmc)
+g.out.mcmc1 <- as.mcmc.list(g.out$samples)
+g.out.mcmc2 <- as.mcmc.list(g.out$samples2)
+g.out.ggs <- ggs(g.out.mcmc2)
 
 g.out.diag <- ggs_diagnostics(g.out.ggs)
 g.out.gelman <- gelman.diag(g.out.mcmc)
-MCMCtrace(g.out.mcmc, params = c("pi",
+MCMCtrace(g.out.mcmc1, params = c("pi",
                                  "phi",
-                                 "E.epsilon",
-                                 "lambda",
-                                 "lambda.total",
-                                 "beta.Obs1.Front",
-                                 "beta.Obs2.Front",
-                                 "correction"
+                                 "int.epsilon",
+                                 "beta"
                                  ))
+
+MCMCtrace(g.out.mcmc2, params = c("lambda",
+                                 "lambda.total",
+                                 "correction"
+))
 
 #Work with output
 #Check dimensions - 20K iterations minus 10K for burn-in, 67 parameters
@@ -483,7 +492,7 @@ MCMCtrace(g.out.mcmc, params = c("pi",
 setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
 g.out <- readRDS("general_model.RDS")
 dim(g.out[[1]])
-g.mcmc.params <- as.mcmc.list(g.out)
+g.mcmc.params <- as.mcmc.list(g.out[[1]])
 g.params.groups <- data.frame(as.matrix(g.mcmc.params)) 
 
 g.params.groups = as.matrix(g.params.groups)
@@ -493,6 +502,8 @@ g.out.groups <- data.frame(
   lcl = apply(g.params.groups, 2, quantile, probs = c(.05), na.rm = TRUE),
   ucl = apply(g.params.groups, 2, quantile, probs = c(.95), na.rm = TRUE),
   SD = apply(g.params.groups, 2, sd))
+
+g.out.g.summ <- MCMCsummary(g.mcmc.params)
 
 FF.g.sums <- apply(FF, 2, sum)
 
