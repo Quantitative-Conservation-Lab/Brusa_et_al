@@ -109,7 +109,6 @@ for(g in unique(s.allo_df$TransectGroup)){
     camcols <- which(str_detect(colnames(s.allo_df),"Cam"))
     if(!any(s.allo_df[s.allo_df$TransectGroup == g & s.allo_df$SPECIES == u,camcols] > 0)){next}
     nspp <- length(grouplist[[u]]$code)
-    #Need something to make a condition that only adds new lines if Cam.Count.FF > 0 for the UN spp assigned to u
     newline <- s.allo_df[s.allo_df$SPECIES == u & s.allo_df$TransectGroup == g,]
     newlines <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))
     specol <- which(colnames(s.allo_df) == "SPECIES")
@@ -118,6 +117,8 @@ for(g in unique(s.allo_df$TransectGroup)){
       as.numeric(x)*grouplist[[u]]$prop
     })
     colnames(newlines) <- colnames(s.allo_df)
+    newlines[,"Count.BM"] <- 0
+    newlines[,"Count.TC"] <- 0
     s.allo_df <- rbind(s.allo_df, newlines)
   }
 }
@@ -318,7 +319,11 @@ for(g in unique(g.allo_df$TransectGroup)){
       as.numeric(x)*grouplist[[u]]$bprop
     })
     colnames(newlines1) <- colnames(g.allo_df)
+    newlines1[,"Count.BM"] <- 0
+    newlines1[,"Count.TC"] <- 0
     colnames(newlines2) <- colnames(g.allo_df)
+    newlines2[,"Count.BM"] <- 0
+    newlines2[,"Count.TC"] <- 0
     g.allo_df <- rbind(g.allo_df, newlines1, newlines2)
   }
 }

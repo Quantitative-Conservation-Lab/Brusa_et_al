@@ -424,41 +424,41 @@ nobs <- 2
 
 
 
-##Compile data##
-
-data <- list(FF = FF[,1:nspecies],
-             FF.total = FF.total,
-             OBS = OBS,
-             OBS.total = OBS.total,
-             seat = seat
-)
-
-
-constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
-
-
-##Initial values##
-
-inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = TRUE),
-                         int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
-                         beta = runif(1, -1, 1),
-                         phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
-                                     na.rm = TRUE)
-)}
-
-
-##MCMC settings##
-
-model <- nimbleModel(code = code,
-                     constants = constants,
-                     data = data,
-                     inits = inits())
-
-MCMCconf <- configureMCMC(model, monitors = params, monitors2 = params2)
-
-MCMC <- buildMCMC(MCMCconf)
-
-compiled.model <- compileNimble(model, MCMC)
+# ##Compile data##
+# 
+# data <- list(FF = FF[,1:nspecies],
+#              FF.total = FF.total,
+#              OBS = OBS,
+#              OBS.total = OBS.total,
+#              seat = seat
+# )
+# 
+# 
+# constants <- list(nspecies = nspecies, nsites = nsites, nobs = 2)
+# 
+# 
+# ##Initial values##
+# 
+# inits <- function(){list(pi = apply(FF[,1:nspecies]/FF.total, 2, mean, na.rm = TRUE),
+#                          int.epsilon = sum(pi * (rnorm(nspecies, runif(1, 0.5, 1), 0.1)*runif(1,1,1.5))),
+#                          beta = runif(1, -1, 1),
+#                          phi = apply(apply(OBS, c(1,2,3), max)/apply(apply(OBS, c(1,2,3), max), 1, sum), c(2,3), mean,
+#                                      na.rm = TRUE)
+# )}
+# 
+# 
+# ##MCMC settings##
+# 
+# model <- nimbleModel(code = code,
+#                      constants = constants,
+#                      data = data,
+#                      inits = inits())
+# 
+# MCMCconf <- configureMCMC(model, monitors = params, monitors2 = params2)
+# 
+# MCMC <- buildMCMC(MCMCconf)
+# 
+# compiled.model <- compileNimble(model, MCMC)
 
 ##Run model##
 
