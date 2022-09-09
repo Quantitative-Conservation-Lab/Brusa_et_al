@@ -280,7 +280,7 @@ MCMCtrace(s.out.mcmc2, params = c("lambda",
 setwd("~/Documents/Windsor/UW Postdoc/Sea duck detection")
 s.out <- readRDS("specific_model.RDS") 
 dim(s.out[[1]])
-s.mcmc.params <- as.mcmc.list(s.out[[1]])
+s.mcmc.params <- as.mcmc.list(s.out[[2]])
 s.params.groups <- data.frame(as.matrix(s.mcmc.params)) 
 
 s.params.groups = as.matrix(s.params.groups)

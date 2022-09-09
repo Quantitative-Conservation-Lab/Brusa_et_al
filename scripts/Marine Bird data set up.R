@@ -49,15 +49,38 @@ colnames(temp_df)[34] <- "sp.group"
 temp_df <- temp_df %>% filter(!str_sub(temp_df$SPECIES,start = 1, end = 1) == "U" | SPECIES == "UNGU" | SPECIES == "UBWG")
 
 #Get group totals and species proportions
+temp_df$sea.bird <- sum(temp_df$Count.FF)
+ML <- temp_df %>% filter(SPECIES == "ANMU" | temp_df$SPECIES == "MAMU")
+temp_df$ML <- ifelse(temp_df$SPECIES == "ANMU" | temp_df$SPECIES == "MAMU", sum(ML$Count.FF), 0)
+DU <- temp_df %>% filter(SPECIES == "AMWI"| temp_df$SPECIES == "BAGO"| temp_df$SPECIES == "BLSC"| 
+                           temp_df$SPECIES == "BUFF"| temp_df$SPECIES == "COGO"| temp_df$SPECIES == "COME"| 
+                           temp_df$SPECIES == "EUWI" | temp_df$SPECIES == "HADU" | temp_df$SPECIES == "LTDU" |
+                           temp_df$SPECIES == "MALL" | temp_df$SPECIES == "NOPI" | temp_df$SPECIES =="RBME" |
+                           temp_df$SPECIES == "RUDU" | temp_df$SPECIES == "SCAU" | temp_df$SPECIES == "SUSC" |
+                           temp_df$SPECIES == "WWSC")
+temp_df$DU <- ifelse(temp_df$SPECIES =="AMWI"| temp_df$SPECIES == "BAGO"| temp_df$SPECIES == "BLSC"| 
+                       temp_df$SPECIES == "BUFF"| temp_df$SPECIES == "COGO"| temp_df$SPECIES == "COME"| 
+                       temp_df$SPECIES == "EUWI" | temp_df$SPECIES == "HADU" | temp_df$SPECIES == "LTDU" |
+                       temp_df$SPECIES == "MALL" | temp_df$SPECIES == "NOPI" | temp_df$SPECIES =="RBME" |
+                       temp_df$SPECIES == "RUDU" | temp_df$SPECIES == "SCAU" | temp_df$SPECIES == "SUSC" |
+                       temp_df$SPECIES == "WWSC", sum(DU$Count.FF), 0)
+
 spp.sums <- temp_df %>% group_by(SPECIES) %>% summarise(Cam.Count.sp = sum(Count.FF), sp.group = sp.group, 
-                                                        Count.FF = Count.FF)
+                                                        Count.FF = Count.FF, sea.bird = sea.bird, ML = ML, DU = DU)
 spp.sums <- spp.sums %>% group_by(sp.group) %>% summarise(SPECIES = SPECIES, sp.group = sp.group, 
-                                                          Cam.Count.sp = Cam.Count.sp, Cam.Count.grp = sum(Count.FF))
+                                                          Cam.Count.sp = Cam.Count.sp, Cam.Count.grp = sum(Count.FF),
+                                                          sea.bird = sea.bird, ML = ML, DU = DU)
 spp.sums <- spp.sums %>% group_by(SPECIES) %>% summarise(sp.group = paste(unique(sp.group)), 
                                                          Cam.Count.sp = round(mean(Cam.Count.sp), 0),
-                                                         Cam.Count.grp = round(mean(Cam.Count.grp),0))
+                                                         Cam.Count.grp = round(mean(Cam.Count.grp),0),
+                                                         sea.bird = round(mean(sea.bird), 0), 
+                                                         ML = round(mean(ML), 0),
+                                                         DU = round(mean(DU), 0))
 
 spp.sums$Proportions <- spp.sums$Cam.Count.sp/spp.sums$Cam.Count.grp
+spp.sums$sea.bird.prop <- spp.sums$Cam.Count.sp/spp.sums$sea.bird
+spp.sums$ML.prop <- spp.sums$Cam.Count.sp/spp.sums$ML
+spp.sums$DU.prop <- spp.sums$Cam.Count.sp/spp.sums$DU
 
 s.allo_df <- sb_df
 s.allo_df <- s.allo_df %>% left_join(x = s.allo_df, y = spp.sums, by = "SPECIES")
@@ -82,7 +105,8 @@ for(i in 1:length(unkvec)){
 #Define the 4-letter codes that should be allocated over for each unknown code
 grouplist[["UNDU"]]$code <- c("AMWI", "BAGO", "BLSC", "BUFF", "COGO", "COME", "EUWI", "HADU", "LTDU", "MALL", 
                               "NOPI","RBME", "RUDU", "SCAU", "SUSC", "WWSC")
-grouplist[["UNSB"]]$code <- unique(sb_df$SPECIES[str_sub(sb_df$SPECIES, start = 1, end =1) != "U"])
+grouplist[["UNSB"]]$code <- sort(c(unique(sb_df$SPECIES[str_sub(sb_df$SPECIES, start = 1, end =1) != "U"]), 
+                                    "UBWG", "UNGU"))
 grouplist[["UNAC"]]$code <- c("ANMU", "COMU", "MAMU", "PIGU", "RHAU")
 grouplist[["UNML"]]$code <- c("ANMU", "MAMU")
 grouplist[["USAC"]]$code <- c("ANMU", "MAMU")
@@ -100,6 +124,31 @@ for(ug in names(grouplist)){
                                              arrange(SPECIES) %>%
                                              select(Proportions)))
 }
+
+#Fix for certain groups
+grouplist[[7]]$prop <- as.double(unlist(s.allo_df %>%
+                                          filter(SPECIES %in% grouplist[[7]]$code) %>%
+                                          filter(!duplicated(SPECIES)) %>%
+                                          arrange(SPECIES) %>%
+                                          select(sea.bird.prop)))
+
+grouplist[[9]]$prop <- as.double(unlist(s.allo_df %>%
+                                          filter(SPECIES %in% grouplist[[9]]$code) %>%
+                                          filter(!duplicated(SPECIES)) %>%
+                                          arrange(SPECIES) %>%
+                                          select(ML.prop)))
+
+grouplist[[11]]$prop <- as.double(unlist(s.allo_df %>%
+                                          filter(SPECIES %in% grouplist[[11]]$code) %>%
+                                          filter(!duplicated(SPECIES)) %>%
+                                          arrange(SPECIES) %>%
+                                          select(ML.prop)))
+
+grouplist[[6]]$prop <- as.double(unlist(s.allo_df %>%
+                                           filter(SPECIES %in% grouplist[[6]]$code) %>%
+                                           filter(!duplicated(SPECIES)) %>%
+                                           arrange(SPECIES) %>%
+                                           select(DU.prop)))
 
 
 for(g in unique(s.allo_df$TransectGroup)){
@@ -126,13 +175,13 @@ for(g in unique(s.allo_df$TransectGroup)){
 s.allo_df <- s.allo_df %>% rename(Count.FF = Cam.Count.FF)
 s.allo_df <- s.allo_df %>% rename(Count.POV = Cam.Count.POV)
 
-s.allo_df$SPECIES[s.allo_df$SPECIES == "UNGU"] <- "GULL"
+s.allo_df$SPECIES[s.allo_df$SPECIES == "UNGU" | s.allo_df$SPECIES == "UBWG"] <- "GULL"
 
 
 s.allo_df$Count.FF[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
 s.allo_df$Count.POV[str_sub(s.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
 
-s.allo_df$SPECIES[s.allo_df$SPECIES == "GULL"] <- "UNGU"
+#s.allo_df$SPECIES[s.allo_df$SPECIES == "GULL"] <- "UNGU"
 
 #Rename into specific species/species groups
 s.allo_df <- s.allo_df %>%
@@ -153,8 +202,8 @@ s.allo_df <- s.allo_df %>%
                    str_detect(s.allo_df$SPECIES, "BLBR") ~ "goose",
                    str_detect(s.allo_df$SPECIES, "RNGR") ~ "red-necked grebe", 
                    str_detect(s.allo_df$SPECIES, "HOGR") ~ "horned grebe", 
-                   str_detect(s.allo_df$SPECIES, "WEGR") ~ "western grebe", str_detect(s.allo_df$SPECIES, "UNGU") | 
-                   str_detect(s.allo_df$SPECIES, "UBWG") | str_detect(s.allo_df$SPECIES, "GWGU") ~ "gull", 
+                   str_detect(s.allo_df$SPECIES, "WEGR") ~ "western grebe", 
+                   str_detect(s.allo_df$SPECIES, "GULL") | str_detect(s.allo_df$SPECIES, "GWGU") ~ "gull", 
                    str_detect(s.allo_df$SPECIES, "HADU") ~ "Harlequin duck", 
                    str_detect(s.allo_df$SPECIES, "LTDU") ~ "long-tailed duck", 
                    str_detect(s.allo_df$SPECIES, "COLO") ~ "common loon", 
@@ -163,7 +212,8 @@ s.allo_df <- s.allo_df %>%
                    str_detect(s.allo_df$SPECIES, "COME") ~ "common merganser", 
                    str_detect(s.allo_df$SPECIES, "RBME") ~ "red-breasted merganser",
                    str_detect(s.allo_df$SPECIES, "COME") ~ "common merganser", 
-                   str_detect(s.allo_df$SPECIES, "RUDU") ~ "ruddy duck", str_detect(s.allo_df$SPECIES, "SCAU") ~ "scaup",
+                   str_detect(s.allo_df$SPECIES, "RUDU") ~ "ruddy duck", 
+                   str_detect(s.allo_df$SPECIES, "SCAU") ~ "scaup",
                    str_detect(s.allo_df$SPECIES, "BLSC") ~ "black scoter", 
                    str_detect(s.allo_df$SPECIES, "SUSC") ~ "surf scoter",
                    str_detect(s.allo_df$SPECIES, "WWSC") ~ "white-winged scoter",
@@ -182,7 +232,7 @@ s.allo_df <- s.allo_df %>%
                    str_detect(s.allo_df$SPECIES, "UNSC") ~ "UNSC"
                    ))
 
-s.allo_df <- s.allo_df[,-34]
+s.allo_df <- s.allo_df[,-c(34:40)]
 colnames(s.allo_df)[34] <- "sp.group"
 
 #To work in model, round counts to whole numbers
@@ -268,6 +318,8 @@ group.sums <- group.sums %>% group_by(group) %>% summarise(duckgroup = paste(uni
 group.sums$duckProportions <- group.sums$Cam.Count.grp/group.sums$Cam.Count.d
 group.sums$birdProportions <- group.sums$Cam.Count.grp/group.sums$Cam.Count.b
 
+group.sums$duckProportions <- ifelse(group.sums$duckgroup == "ducks", group.sums$duckProportions, 0)
+
 g.allo_df <- g.allo_df %>% left_join(x = g.allo_df, y = group.sums, by = "group")
 g.allo_df <- g.allo_df[,-c(35:39)]
 
@@ -282,22 +334,25 @@ grouplist <- list()
 for(i in 1:length(unkvec)){
   u <- unkvec[i]
   grouplist[[u]]$grp <- NA
-  grouplist[[u]]$dprop <- NA
-  grouplist[[u]]$bprop <- NA
+  grouplist[[u]]$prop <- NA
 }
 
 #Define the 4-letter codes that should be allocated over for each unknown code
 grouplist[["UNDU"]]$grp <- c("bufflehead", "dabbling duck", "goldeneye", "Harlequin duck", "long-tailed duck", 
                          "merganser", "ruddy duck", "scaup", "scoter")
-grouplist[["UNSB"]]$grp <- unique(g.allo_df$group[str_sub(g.allo_df$group, start = 1, end =1) != "U"])
+grouplist[["UNSB"]]$grp <- sort(c(unique(g.allo_df$group[str_sub(g.allo_df$group, start = 1, end =1) != "U"])))
 
-for(ug in names(grouplist)){
-  grouplist[[ug]]$dprop <- as.double(unlist(g.allo_df %>%
-                                             filter(group %in% grouplist[[ug]]$grp) %>%
+grouplist[[1]]$prop <- as.double(unlist(g.allo_df %>%
+                                             filter(group %in% grouplist[[1]]$grp) %>%
                                              filter(!duplicated(group)) %>%
                                              arrange(group) %>%
-                                             select(duckProportions, birdProportions)))
-}
+                                             select(duckProportions)))
+
+grouplist[[2]]$prop <- as.double(unlist(g.allo_df %>%
+                                           filter(group %in% grouplist[[2]]$grp) %>%
+                                           filter(!duplicated(group)) %>%
+                                           arrange(group) %>%
+                                           select(birdProportions)))
 
 
 
@@ -309,21 +364,14 @@ for(g in unique(g.allo_df$TransectGroup)){
     if(!any(g.allo_df[g.allo_df$TransectGroup == g & g.allo_df$SPECIES == u,camcols] > 0)){next}
     nspp <- length(grouplist[[u]]$grp)
     newline <- g.allo_df[g.allo_df$group == u & g.allo_df$TransectGroup == g,]
-    newlines1 <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))
-    newlines2 <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))
+    newlines <- as.data.frame(t(matrix(ncol = nspp, nrow = ncol(newline), data = rep(unlist(newline),nspp))))
     camcols <- which(str_detect(colnames(g.allo_df),"Cam"))
-    newlines1[,camcols] <- apply(newlines1[,camcols], 2,FUN = function(x){
-      as.numeric(x)*grouplist[[u]]$dprop
+    newlines[,camcols] <- apply(newlines[,camcols], 2, FUN = function(x) {
+      as.numeric(x)*grouplist[[u]]$prop
     })
-    newlines2[,camcols] <- apply(newlines2[,camcols], 2,FUN = function(x){
-      as.numeric(x)*grouplist[[u]]$bprop
-    })
-    colnames(newlines1) <- colnames(g.allo_df)
-    newlines1[,"Count.BM"] <- 0
-    newlines1[,"Count.TC"] <- 0
-    colnames(newlines2) <- colnames(g.allo_df)
-    newlines2[,"Count.BM"] <- 0
-    newlines2[,"Count.TC"] <- 0
+    colnames(newlines) <- colnames(g.allo_df)
+    newlines[,"Count.BM"] <- 0
+    newlines[,"Count.TC"] <- 0
     g.allo_df <- rbind(g.allo_df, newlines1, newlines2)
   }
 }
@@ -332,12 +380,8 @@ for(g in unique(g.allo_df$TransectGroup)){
 g.allo_df <- g.allo_df %>% rename(Count.FF = Cam.Count.FF)
 g.allo_df <- g.allo_df %>% rename(Count.POV = Cam.Count.POV)
 
-g.allo_df$SPECIES[g.allo_df$SPECIES == "UNGU"] <- "GULL"
-
-g.allo_df$Count.FF[str_sub(g.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
-g.allo_df$Count.POV[str_sub(g.allo_df$SPECIES, start = 1, end = 1) == "U"] <- 0
-
-g.allo_df$SPECIES[g.allo_df$SPECIES == "GULL"] <- "UNGU"
+g.allo_df$Count.FF[str_sub(g.allo_df$group, start = 1, end = 1) == "U"] <- 0
+g.allo_df$Count.POV[str_sub(g.allo_df$group, start = 1, end = 1) == "U"] <- 0
 
 g.allo_df <- g.allo_df[,-c(35, 36)]
 
