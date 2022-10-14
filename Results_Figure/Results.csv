@@ -1,11 +1,11 @@
 Species,Species.group,FF.Count,Obs1.Count,Obs2.Count,Obs1.Est,Obs1.L,Obs1.U,Obs2.Est,Obs2.L,Obs2.U
-Barrow's goldeneye,Goldeneye,30,29,19,28,18,49,28,17,52
-Black scoter,Scoter,2,0,0,0,0,0,0,0,0
+Barrow's Goldeneye,Goldeneye,30,29,19,28,18,49,28,17,52
+Black Scoter,Scoter,2,0,0,0,0,0,0,0,0
 Bufflehead,Bufflehead,1659,1196,991,1665,1545,1797,1667,1536,1809
-Common goldeneye,Goldeneye,174,90,32,172,135,223,169,121,247
-Common merganser,Merganser,1,1,2,0,0,6,0,0,5
-Harlequin duck,Harlequin duck,74,36,21,71,49,110,70,46,118
-Long-tailed duck,Long-tailed duck,402,320,260,401,347,466,402,344,472
-Red-breasted merganser,Merganser,104,57,19,102,75,143,99,63,170
-Surf scoter,Scoter,993,691,560,996,905,1101,997,898,1107
-White-winged scoter,Scoter,450,129,92,447,369,548,447,360,566
+Common Goldeneye,Goldeneye,174,90,32,172,135,223,169,121,247
+Common Merganser,Merganser,1,1,2,0,0,6,0,0,5
+Harlequin Duck,Harlequin duck,74,36,21,71,49,110,70,46,118
+Long-tailed Duck,Long-tailed duck,402,320,260,401,347,466,402,344,472
+Red-breasted Merganser,Merganser,104,57,19,102,75,143,99,63,170
+Surf Scoter,Scoter,993,691,560,996,905,1101,997,898,1107
+White-winged Scoter,Scoter,450,129,92,447,369,548,447,360,566
