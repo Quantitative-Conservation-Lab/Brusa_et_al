@@ -108,7 +108,7 @@ for(j in 1:nsites){
   #Front facing camera data
   FF[j,] <- rpois(nspecies, lambda.total * pi)
   
-  #Point of view camera data
+  #Point of view species availability
   POV[j,] <- rpois(nspecies, lambda.total * pi * alpha.POV)
   
   #Latent abundance w/correct ID
