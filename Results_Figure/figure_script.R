@@ -2,7 +2,6 @@ library(here)
 library(ggplot2)
 
 results <- read.csv(here("Results_Figure","Results.csv"),header = TRUE)
-results <- read.csv("Results.csv",header = TRUE)
 results <- as.data.frame(results) %>%
   filter(Species != "Black Scoter")
 
