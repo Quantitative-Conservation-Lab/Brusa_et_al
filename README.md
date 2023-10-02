@@ -31,7 +31,9 @@ Long-term, large-scale monitoring of wildlife populations is an integral part of
 
 ### [Figures](./figures)
 
-+ Figure1
++ [Figure 1](./figures/Figure1.png) is a directed acyclic graph showing relationship between in-sample data and out-of-sample correction.
++ [Figure 2](./figures/Figure2.png) is the bserver count accuracy per species.
++ [Figure 3](./figures/Figure3.png) is the model performance for count corrections.
 
 ### Required Packages and Versions Used
 
