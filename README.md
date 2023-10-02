@@ -21,9 +21,13 @@ Long-term, large-scale monitoring of wildlife populations is an integral part of
 
 ### [Data](./data)
 
-+ [FF_c.csv](./data/FF_c.csv) are ...
-+ [FF.csv](./data/FF.csv) are ...
-+ [Obs1_c.csv](./data/Obs1_c.csv) are ...
++ [FF.csv](./data/FF.csv) are forward-facing camera data for the fine-grained (i.e., species-specific) analysis.
++ [Obs1.csv](./data/Obs1.csv) are Observer One's data for the fine-grained (i.e., species-specific) analysis.
++ [Obs2.csv](./data/Obs2.csv) are Observer Two's data for the fine-grained (i.e., species-specific) analysis.
++ [FF_c.csv](./data/FF_c.csv) are forward-facing camera data for the coarse-grained (i.e., species-groups) analysis.
++ [Obs1_c.csv](./data/Obs1_c.csv) are Observer One's data for the the coarse-grained (i.e., species-groups) analysis.
++ [Obs2_c.csv](./data/Obs2_c.csv) are Observer Two's data for the the coarse-grained (i.e., species-groups) analysis.
++ [seat.csv](./data/seat.csv) are the seat position during a flight transect for each observer.
 
 ### [Figures](./figures)
 

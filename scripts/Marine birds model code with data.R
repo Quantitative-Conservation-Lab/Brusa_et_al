@@ -15,13 +15,13 @@ library(here)
 
 ##Bring in data files (FF.csv, Obs1.csv, Obs2.csv, seat.csv)
 
-FF <- read.csv(here("FF.csv"))
+FF <- read.csv(here("./data/FF.csv"))
 FF <- as.matrix(FF)
-Obs1 <- read.csv(here("Obs1.csv"))
+Obs1 <- read.csv(here("./data/Obs1.csv"))
 Obs1 <- as.matrix(Obs1)
-Obs2 <- read.csv(here("Obs2.csv"))
+Obs2 <- read.csv(here("./data/Obs2.csv"))
 Obs2 <- as.matrix(Obs2)
-seat <- read.csv(here("seat.csv"))
+seat <- read.csv(here("./data/seat.csv"))
 seat <- as.matrix(seat)
 
 OBS <- array(c(Obs1, Obs2), dim = c(nrow(Obs1), ncol(Obs1), 2))
@@ -189,11 +189,11 @@ f.out <- runMCMC(compiled.model$MCMC,
 
 ##Bring in data files (FF_c.csv, Obs1_c.csv, Obs2_c.csv, seat.csv)
 ##Name the objects as FF, Obs1, Obs2, and seat
-FF <- read.csv("FF_c.csv")
+FF <- read.csv("./data/FF_c.csv")
 FF <- as.matrix(FF)
-Obs1 <- read.csv("Obs1_c.csv")
+Obs1 <- read.csv("./data/Obs1_c.csv")
 Obs1 <- as.matrix(Obs1)
-Obs2<- read.csv("Obs2_c.csv")
+Obs2<- read.csv("./data/Obs2_c.csv")
 Obs2 <- as.matrax(Obs2)
 seat <- read.csv(seat.csv)
 seat <- as.matrix(seat)
