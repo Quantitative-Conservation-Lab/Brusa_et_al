@@ -32,12 +32,19 @@ Long-term, large-scale monitoring of wildlife populations is an integral part of
 ### [Figures](./figures)
 
 + [Figure 1](./figures/Figure1.png) is a directed acyclic graph showing relationship between in-sample data and out-of-sample correction.
-+ [Figure 2](./figures/Figure2.png) is the bserver count accuracy per species.
++ [Figure 2](./figures/Figure2.png) is the observer count accuracy per species.
 + [Figure 3](./figures/Figure3.png) is the model performance for count corrections.
 
 ### Required Packages and Versions Used
+tidyverse
+nimble
+ggmcmc
+coda
+MCMCvis
+viridis
+here
 
 ### Details of Article
 
 ### How to Use this Repository
-
+The model code can be used to estimate correction factors for count data of marine bird species taken from aerial surveys. We provide code for simulations (as a proof-of-concept) and to use with our data, which are provided in the data folder. The model code in the "Marine birds model code with data.R" script can be adapted to fit data for future surveys in the Salish Sea or data for other studies using a similar protocol.
