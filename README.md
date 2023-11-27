@@ -2,7 +2,7 @@
 
 #### *In Review*  
 
-#### Jamie Brusa, Matthew T. Farr, Joseph Evenson, Bryan Murphie, Thomas A. Cyra, Heather J. Tschaekofske, Kyle A. Spragens, Emily Silverman, Sarah J. Converse  
+#### Jamie L. Brusa, Matthew T. Farr, Joseph Evenson, Bryan Murphie, Thomas A. Cyra, Heather J. Tschaekofske, Kyle A. Spragens, Emily Silverman, Sarah J. Converse  
 
 ##### Please contact the first author for questions about the code or data: Jamie Brusa (jlbwcc@gmail.com)
 _______________________________________________________________________________________
