@@ -1,6 +1,4 @@
-## Correcting for measurement errors in a long-term aerial survey with auxiliary photographic data  
-
-#### *In Review*  
+## Correcting for measurement errors in a long-term aerial survey with auxiliary photographic data   
 
 #### Jamie L. Brusa, Matthew T. Farr, Joseph Evenson, Bryan Murphie, Thomas A. Cyra, Heather J. Tschaekofske, Kyle A. Spragens, Emily Silverman, Sarah J. Converse  
 
